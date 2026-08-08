@@ -1,0 +1,35 @@
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+
+# PyInstaller build output (from build.bat)
+build/
+dist/
+*.spec
+
+# Editor / OS clutter
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# App data (settings, trained model, training data) — this lives in
+# %APPDATA%\Lock In\ on Windows, not in this project folder, so it
+# normally won't show up here. This is just a safety net in case any
+# of it ever gets created locally.
+config.json
+model.json
+observations.jsonl
+lockin_training_data.csv

@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset_name: LockIn-Windows.zip
+          - os: macos-latest
+            asset_name: LockIn-macOS.zip
+          - os: ubuntu-latest
+            asset_name: LockIn-Linux.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: pyinstaller --noconfirm --onefile --windowed --name "Lock In" --hidden-import win32gui --hidden-import win32process --hidden-import win32con --hidden-import psutil --collect-all customtkinter main.py
+
+      - name: Build (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: pyinstaller --noconfirm --onefile --windowed --name "Lock In" --collect-all customtkinter main.py
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/Lock In.exe" -DestinationPath "${{ matrix.asset_name }}"
+
+      - name: Package (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd dist
+          zip -r "../${{ matrix.asset_name }}" "Lock In.app"
+
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd dist
+          tar -czf "../${{ matrix.asset_name }}" "Lock In"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" artifacts/*.zip artifacts/*.tar.gz \
+            --repo "${{ github.repository }}" \
+            --title "Lock In ${{ github.ref_name }}" \
+            --generate-notes
