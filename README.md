@@ -29,10 +29,11 @@ Training happens through a separate CLI — see [Training it](#training-it):
 python train.py label
 ```
 
-Only `customtkinter` is strictly required for the app to *open*. But on
-Windows, `pywin32` and `psutil` are what let it actually see which window
-you're in — without them, blocking silently does nothing at all, all day,
-and the app just becomes a plain (very good) timer.
+`customtkinter` and `Pillow` are required for the app to *open* — Pillow
+draws the glow and background art. On Windows, `pywin32` and `psutil` are
+what let it actually see which window you're in — without them, blocking
+silently does nothing at all, all day, and the app just becomes a plain
+(very good) timer.
 
 This is an easy trap to fall into: `run.bat` launches with `pythonw.exe` on
 purpose, so no black console window sits behind the app — but that also
@@ -163,6 +164,24 @@ that Rider's actual suit colors. This only changes colors — the Henshin
 button, the timer digits/progress bar during a focus block, and a small
 "DRIVER: <name>" label — not any copy or behavior. Defaults to the
 original 1971 series. See `lock_in/rider_themes.py` for the full palette.
+
+### Look and feel
+
+`lock_in/visuals.py` generates the app's art at runtime with Pillow, tinted
+to whichever Rider is picked:
+
+- **A display font** for the timer digits and headings, instead of the
+  toolkit's plain default — a different one per OS (`Bahnschrift` on
+  Windows, `Avenir Next` on macOS, `Noto Sans` on Linux), falling back
+  quietly to the system default if that font isn't installed.
+- **A soft glow** behind the timer digits (the Rider's primary color) and
+  behind the Henshin button (its secondary color).
+- **A faint diagonal-stripe wallpaper** behind the whole window, tinted
+  with both of the Rider's colors, with separate light- and dark-mode
+  versions so it never fights with the appearance-mode setting.
+
+None of this touches copy or behavior — turn the window into any Rider's
+colors and the words stay exactly the same.
 
 ---
 
@@ -367,6 +386,8 @@ Lock In/
 │   ├── observations.py         Records every window seen during focus and tracks
 │   │                           which have been labelled. Backs train.py.
 │   ├── rider_themes.py         Kamen Rider color palettes for the theme toggle.
+│   ├── visuals.py               Display font pick, plus Pillow-generated glow
+│   │                           and background art, tinted by the Rider theme.
 │   │
 │   │   ── platform-facing shells, thin by design ──
 │   ├── monitor.py              Foreground-window polling on a daemon thread.
@@ -387,6 +408,8 @@ Lock In/
 │   │                           real network calls, a fake client stands in.
 │   ├── test_rider_themes.py    Palette completeness, color validity, dark-mode
 │   │                           shade generation.
+│   ├── test_visuals.py         Font lookup, glow shape/fade, background contrast
+│   │                           between light and dark mode.
 │   └── smoke_ui.py             Headless end-to-end run under Xvfb (not pytest).
 │
 ├── .github/workflows/

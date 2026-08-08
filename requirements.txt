@@ -1,6 +1,11 @@
 # This one draws the app's window. The app needs it to work at all.
 customtkinter>=5.2.2
 
+# This one draws the soft glow/gradient pictures behind the timer and the
+# Henshin button, and the faint background pattern. The app needs it to
+# work at all now too.
+Pillow>=10.0.0
+
 # These help the app see which window you're looking at, on Windows.
 # Without them, the app still works, but it can't tell what app you're in,
 # so it can't block anything.

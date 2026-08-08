@@ -45,6 +45,7 @@ from .monitor import BACKEND_AVAILABLE, ActiveWindowMonitor, minimize_window
 from .notifier import Notifier
 from .session import Event, Phase, PomodoroSession
 from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES
+from .visuals import display_font_family, make_background_texture, make_glow
 
 # Our color choices, kept in one spot — so changing the theme means
 # changing a few lines here, not hunting through the whole file.
@@ -66,6 +67,16 @@ COLOR_TIMER_ACCENT = ("#1c7ed6", "#4dabf7")      # blue — timer-length setting
 COLOR_ENFORCE_ACCENT = ("#e03131", "#ff8787")    # red — enforcement settings
 COLOR_LOOK_ACCENT = ("#0ca678", "#63e6be")       # teal — sound/notification/look settings
 COLOR_CLAUDE_ACCENT = ("#9c36b5", "#e599f7")     # purple — the Claude fallback feature
+
+# The nicer-looking font for the timer digits and headings. Picked once
+# per computer in visuals.py — see that file for why.
+DISPLAY_FONT = display_font_family()
+
+# The background wallpaper picture is made bigger than the window's
+# starting size, so shrinking the window down never looks blurry — only
+# growing it a lot past this would.
+BG_TEXTURE_WIDTH = 900
+BG_TEXTURE_HEIGHT = 1200
 
 
 class LockInApp(ctk.CTk):
@@ -112,6 +123,16 @@ class LockInApp(ctk.CTk):
         self.minsize(500, 640)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
+        # This picture sits behind absolutely everything else. It has to
+        # be made FIRST, before any other button or label — in this
+        # screen-drawing toolkit, whatever gets made first sits at the
+        # very back, like the bottom of a stack of papers.
+        self._bg_label = ctk.CTkLabel(self, text="", image=self._bg_image)
+        self._bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        # Whenever you resize the window, stretch the picture to match —
+        # otherwise it would stay one fixed size and leave a bare edge.
+        self.bind("<Configure>", self._on_window_resized)
+
         self._build_header()
         self._build_tabs()
 
@@ -128,6 +149,12 @@ class LockInApp(ctk.CTk):
         Look up which Kamen Rider is picked in settings, and remember
         that Rider's two colors so the rest of the app can use them.
 
+        Also redraws the three Rider-colored pictures (the background
+        wallpaper, and the two soft glows) to match. The very first time
+        this runs, the pictures don't exist yet, so we make brand-new
+        ones; every time after that (when you pick a different Rider),
+        we just update the ones already on screen instead.
+
         If we don't understand the saved name for some reason, we just
         use the first Rider instead of crashing.
         """
@@ -136,6 +163,47 @@ class LockInApp(ctk.CTk):
         )
         self.color_focus = theme.primary_pair
         self.color_rider_accent = theme.secondary_pair
+
+        timer_glow = make_glow(300, 120, theme.primary)
+        button_glow = make_glow(170, 70, theme.secondary)
+        bg_dark = make_background_texture(
+            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, theme.primary, theme.secondary, dark=True
+        )
+        bg_light = make_background_texture(
+            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, theme.primary, theme.secondary, dark=False
+        )
+
+        if hasattr(self, "_timer_glow_image"):
+            self._timer_glow_image.configure(light_image=timer_glow, dark_image=timer_glow)
+            self._button_glow_image.configure(light_image=button_glow, dark_image=button_glow)
+            self._bg_image.configure(light_image=bg_light, dark_image=bg_dark)
+        else:
+            self._timer_glow_image = ctk.CTkImage(
+                light_image=timer_glow, dark_image=timer_glow, size=(300, 120)
+            )
+            self._button_glow_image = ctk.CTkImage(
+                light_image=button_glow, dark_image=button_glow, size=(170, 70)
+            )
+            self._bg_image = ctk.CTkImage(
+                light_image=bg_light, dark_image=bg_dark,
+                size=(BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT),
+            )
+
+    def _on_window_resized(self, event) -> None:
+        """
+        Stretch the background picture to match whenever the window
+        changes size.
+
+        This fires a LOT while you're actively dragging the window's
+        edge, so we skip the work unless the size actually changed —
+        otherwise we'd be resizing the same picture to the same size
+        over and over for no reason.
+        """
+        if event.widget is not self:
+            return
+        new_size = (max(event.width, 1), max(event.height, 1))
+        if self._bg_image.cget("size") != new_size:
+            self._bg_image.configure(size=new_size)
 
     def _warn_if_app_detection_unavailable(self) -> None:
         """
@@ -171,14 +239,22 @@ class LockInApp(ctk.CTk):
             font=ctk.CTkFont(size=13), wraplength=480, justify="left",
         )
 
+        # A soft glow sits right behind the timer digits. It has to be
+        # made before EVERY other label in this header, including the
+        # phase name above it — whatever gets made first is stacked at
+        # the back, so this makes sure the glow never paints over words.
+        self._timer_glow_label = ctk.CTkLabel(header, text="", image=self._timer_glow_image)
+        self._timer_glow_label.place(relx=0.5, rely=0.33, anchor="center")
+
         self.phase_label = ctk.CTkLabel(
-            header, text="Ready", font=ctk.CTkFont(size=16, weight="bold"),
+            header, text="Standing By",
+            font=ctk.CTkFont(family=DISPLAY_FONT, size=16, weight="bold"),
             text_color=COLOR_IDLE,
         )
         self.phase_label.pack(pady=(4, 0))
 
         self.time_label = ctk.CTkLabel(
-            header, text="25:00", font=ctk.CTkFont(size=76, weight="bold"),
+            header, text="25:00", font=ctk.CTkFont(family=DISPLAY_FONT, size=76, weight="bold"),
         )
         self.time_label.pack(pady=(0, 4))
 
@@ -190,7 +266,7 @@ class LockInApp(ctk.CTk):
 
         self.driver_label = ctk.CTkLabel(
             header, text=f"DRIVER: {self.config_obj.rider_theme.upper()}",
-            font=ctk.CTkFont(size=10, weight="bold"),
+            font=ctk.CTkFont(family=DISPLAY_FONT, size=10, weight="bold"),
             text_color=self.color_rider_accent,
         )
         self.driver_label.pack(pady=(2, 0))
@@ -202,9 +278,14 @@ class LockInApp(ctk.CTk):
         controls = ctk.CTkFrame(header, fg_color="transparent")
         controls.pack()
 
+        # Same trick as the timer glow: made first, so it sits behind the
+        # Henshin button that gets made right after it.
+        self._button_glow_label = ctk.CTkLabel(controls, text="", image=self._button_glow_image)
+        self._button_glow_label.place(relx=0.18, rely=0.5, anchor="center")
+
         self.start_button = ctk.CTkButton(
             controls, text="Henshin", width=140, height=40,
-            font=ctk.CTkFont(size=15, weight="bold"), command=self._on_toggle,
+            font=ctk.CTkFont(family=DISPLAY_FONT, size=15, weight="bold"), command=self._on_toggle,
             fg_color=self.color_rider_accent,
         )
         self.start_button.grid(row=0, column=0, padx=6)

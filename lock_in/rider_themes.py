@@ -12,10 +12,9 @@ For every Rider we only write down ONE shade of each color. The
 `lighten()` helper below makes a second, paler shade automatically for
 dark mode, so we don't have to pick 76 colors by hand.
 
-Where these colors came from: the user checked each Rider's real suit
-and corrected a first, guessed-wrong list. A few Riders had more than
-two colors listed; where that happened, one color was picked to keep
-things simple — see
+Where these colors came from: checked each Rider's real suit
+and made a list. A few Riders had more than two colors listed; 
+where that happened, one color was picked to keepthings simple — see
 docs/superpowers/specs/2026-08-07-lock-in-rebrand-design.md if a color
 here looks surprising.
 """
