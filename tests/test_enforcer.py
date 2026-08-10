@@ -295,71 +295,111 @@ def test_every_rung_has_message_copy(action):
 
 
 def test_message_copy_matches_serious_tokusatsu_tone():
-    title, body = message_for(Action.WARN, app="discord.exe", remaining="12:30",
-                              seconds=20, lockdown=15)
+    title, body = message_for(Action.WARN, terminology="tokusatsu", app="discord.exe",
+                              remaining="12:30", seconds=20, lockdown=15)
     assert title == "Off Mission"
     assert body == "discord.exe is not part of the mission. 12:30 remains in this Henshin block."
 
-    title, body = message_for(Action.NAG, app="discord.exe", remaining="12:30",
-                              seconds=20, lockdown=15)
+    title, body = message_for(Action.NAG, terminology="tokusatsu", app="discord.exe",
+                              remaining="12:30", seconds=20, lockdown=15)
     assert title == "Repeated Violation"
     assert body == "20s on discord.exe. 12:30 until the mission ends — hold the line."
 
-    title, body = message_for(Action.MINIMIZE, app="discord.exe", remaining="12:30",
-                              seconds=20, lockdown=15)
+    title, body = message_for(Action.MINIMIZE, terminology="tokusatsu", app="discord.exe",
+                              remaining="12:30", seconds=20, lockdown=15)
     assert title == "Window Neutralized"
     assert body == "discord.exe minimized. 12:30 remaining. This was your directive."
 
-    title, body = message_for(Action.LOCKDOWN, app="discord.exe", remaining="12:30",
-                              seconds=20, lockdown=15)
+    title, body = message_for(Action.LOCKDOWN, terminology="tokusatsu", app="discord.exe",
+                              remaining="12:30", seconds=20, lockdown=15)
     assert title == "Full Lockdown"
     assert body == "Screen sealed for 15s. Recover, then resume the mission."
 
 
-def test_default_era_is_heisei():
-    """No era given should read exactly like explicitly asking for Heisei."""
+def test_message_copy_defaults_to_professional_tone():
+    """No terminology given should read exactly like asking for "professional"."""
     default = message_for(Action.WARN, app="discord.exe", remaining="12:30", seconds=20, lockdown=15)
-    heisei = message_for(Action.WARN, era="Heisei", app="discord.exe", remaining="12:30",
-                         seconds=20, lockdown=15)
+    professional = message_for(Action.WARN, terminology="professional", app="discord.exe",
+                               remaining="12:30", seconds=20, lockdown=15)
+    assert default == professional
+
+
+def test_professional_tone_is_the_same_regardless_of_era():
+    """Professional mode has one voice -- era only matters in tokusatsu mode."""
+    showa = message_for(Action.WARN, era="Showa", terminology="professional", app="discord.exe",
+                        remaining="12:30", seconds=20, lockdown=15)
+    reiwa = message_for(Action.WARN, era="Reiwa", terminology="professional", app="discord.exe",
+                        remaining="12:30", seconds=20, lockdown=15)
+    assert showa == reiwa
+
+
+def test_professional_tone_does_not_use_tokusatsu_words():
+    _, body = message_for(Action.WARN, terminology="professional", app="discord.exe",
+                          remaining="12:30", seconds=20, lockdown=15)
+    assert "Henshin" not in body
+    assert "mission" not in body.lower()
+
+
+def test_default_era_is_heisei():
+    """No era given (in tokusatsu mode) should read exactly like asking for Heisei."""
+    default = message_for(Action.WARN, terminology="tokusatsu", app="discord.exe",
+                          remaining="12:30", seconds=20, lockdown=15)
+    heisei = message_for(Action.WARN, era="Heisei", terminology="tokusatsu", app="discord.exe",
+                         remaining="12:30", seconds=20, lockdown=15)
     assert default == heisei
 
 
 @pytest.mark.parametrize("era", ["Showa", "Heisei", "Reiwa"])
 @pytest.mark.parametrize("action", [Action.WARN, Action.NAG, Action.MINIMIZE, Action.LOCKDOWN])
 def test_every_era_has_message_copy_for_every_rung(era, action):
-    title, body = message_for(action, era=era, app="discord.exe", remaining="12:30",
-                              seconds=20, lockdown=15)
+    title, body = message_for(action, era=era, terminology="tokusatsu", app="discord.exe",
+                              remaining="12:30", seconds=20, lockdown=15)
     assert title and body
     assert "{" not in body
 
 
 def test_showa_and_reiwa_have_a_different_voice_than_heisei():
     """The whole point of era copy is that it doesn't all read the same."""
-    heisei_title, _ = message_for(Action.WARN, era="Heisei", app="discord.exe", remaining="12:30",
-                                  seconds=20, lockdown=15)
-    showa_title, _ = message_for(Action.WARN, era="Showa", app="discord.exe", remaining="12:30",
-                                 seconds=20, lockdown=15)
-    reiwa_title, _ = message_for(Action.WARN, era="Reiwa", app="discord.exe", remaining="12:30",
-                                 seconds=20, lockdown=15)
+    heisei_title, _ = message_for(Action.WARN, era="Heisei", terminology="tokusatsu",
+                                  app="discord.exe", remaining="12:30", seconds=20, lockdown=15)
+    showa_title, _ = message_for(Action.WARN, era="Showa", terminology="tokusatsu",
+                                 app="discord.exe", remaining="12:30", seconds=20, lockdown=15)
+    reiwa_title, _ = message_for(Action.WARN, era="Reiwa", terminology="tokusatsu",
+                                 app="discord.exe", remaining="12:30", seconds=20, lockdown=15)
     assert len({heisei_title, showa_title, reiwa_title}) == 3
 
 
 def test_unknown_era_falls_back_to_heisei_instead_of_crashing():
-    title, _ = message_for(Action.WARN, era="Not A Real Era", app="discord.exe",
-                           remaining="12:30", seconds=20, lockdown=15)
+    title, _ = message_for(Action.WARN, era="Not A Real Era", terminology="tokusatsu",
+                           app="discord.exe", remaining="12:30", seconds=20, lockdown=15)
     assert title == "Off Mission"
+
+
+def test_unknown_terminology_falls_back_to_professional_instead_of_crashing():
+    title, _ = message_for(Action.WARN, terminology="Not A Real Mode", app="discord.exe",
+                           remaining="12:30", seconds=20, lockdown=15)
+    professional_title, _ = message_for(Action.WARN, terminology="professional", app="discord.exe",
+                                        remaining="12:30", seconds=20, lockdown=15)
+    assert title == professional_title
 
 
 @pytest.mark.parametrize("era", ["Showa", "Heisei", "Reiwa"])
 def test_every_era_has_a_lockdown_screen_label(era):
     from lock_in.enforcer import lockdown_label_for
-    label = lockdown_label_for(era)
+    label = lockdown_label_for(era, terminology="tokusatsu")
     assert label and label == label.upper()   # the lockdown screen shouts, on purpose
 
 
 def test_lockdown_label_falls_back_for_unknown_era():
     from lock_in.enforcer import lockdown_label_for
-    assert lockdown_label_for("Not A Real Era") == lockdown_label_for("Heisei")
+    assert lockdown_label_for("Not A Real Era", terminology="tokusatsu") == \
+        lockdown_label_for("Heisei", terminology="tokusatsu")
+
+
+def test_lockdown_label_defaults_to_professional():
+    from lock_in.enforcer import lockdown_label_for
+    assert lockdown_label_for("Heisei") == lockdown_label_for("Heisei", terminology="professional")
+    assert lockdown_label_for("Heisei") != lockdown_label_for("Heisei", terminology="tokusatsu")
 
 
 def test_window_display_truncates_long_titles():

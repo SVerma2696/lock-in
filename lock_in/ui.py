@@ -45,7 +45,7 @@ from .observations import ObservationStore
 from .enforcer import Action, Enforcer, Reason, WindowInfo, judge, lockdown_label_for, message_for
 from .monitor import BACKEND_AVAILABLE, ActiveWindowMonitor, minimize_window
 from .notifier import Notifier
-from .session import Event, Phase, PomodoroSession
+from .session import Event, Phase, PomodoroSession, label_for
 from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES
 from .visuals import (
     display_font_family,
@@ -195,6 +195,25 @@ class LockInApp(ctk.CTk):
                 self.iconbitmap(default=str(ico_path))
             except Exception:
                 pass
+
+    # ================================================================== #
+    # Picking words: "professional" (the normal voice) or "tokusatsu"
+    # (the Kamen Rider-flavored voice you turn on in Settings)
+    # ================================================================== #
+    def _is_tokusatsu(self) -> bool:
+        return self.config_obj.terminology == "tokusatsu"
+
+    def _driver_prefix(self) -> str:
+        """The little word in front of the Rider's name under the timer."""
+        return "DRIVER" if self._is_tokusatsu() else "THEME"
+
+    def _henshin_word(self) -> str:
+        """What the main Start/Henshin button says when it's not running."""
+        return "Henshin" if self._is_tokusatsu() else "Start"
+
+    def _rider_row_label_text(self) -> str:
+        """What the color-theme picker's row is called in Settings."""
+        return "Kamen Rider theme" if self._is_tokusatsu() else "Color theme"
 
     def _apply_rider_theme(self) -> None:
         """
@@ -347,7 +366,7 @@ class LockInApp(ctk.CTk):
         self.streak_label.pack()
 
         self.driver_label = ctk.CTkLabel(
-            header, text=f"DRIVER: {self.config_obj.rider_theme.upper()}",
+            header, text=f"{self._driver_prefix()}: {self.config_obj.rider_theme.upper()}",
             font=ctk.CTkFont(family=DISPLAY_FONT, size=10, weight="bold"),
             text_color=self.color_rider_accent,
         )
@@ -366,7 +385,7 @@ class LockInApp(ctk.CTk):
         self._button_glow_label.place(relx=0.18, rely=0.5, anchor="center")
 
         self.start_button = ctk.CTkButton(
-            controls, text="Henshin", width=140, height=40,
+            controls, text=self._henshin_word(), width=140, height=40,
             font=ctk.CTkFont(family=DISPLAY_FONT, size=15, weight="bold"), command=self._on_toggle,
             fg_color=self.color_rider_accent,
         )
@@ -584,13 +603,26 @@ class LockInApp(ctk.CTk):
 
         rider_row = ctk.CTkFrame(frame, fg_color="transparent")
         rider_row.pack(fill="x", pady=(10, 4))
-        ctk.CTkLabel(rider_row, text="Kamen Rider theme", width=260, anchor="w").pack(side="left")
+        self.rider_row_label = ctk.CTkLabel(
+            rider_row, text=self._rider_row_label_text(), width=260, anchor="w",
+        )
+        self.rider_row_label.pack(side="left")
         self.rider_menu = ctk.CTkOptionMenu(
             rider_row, values=list(RIDER_THEMES.keys()), width=220,
             command=self._on_rider_theme_change,
         )
         self.rider_menu.set(self.config_obj.rider_theme)
         self.rider_menu.pack(side="left")
+
+        terminology_row = ctk.CTkFrame(frame, fg_color="transparent")
+        terminology_row.pack(fill="x", pady=(10, 4))
+        ctk.CTkLabel(terminology_row, text="Wording", width=260, anchor="w").pack(side="left")
+        self.terminology_menu = ctk.CTkOptionMenu(
+            terminology_row, values=["Professional", "Tokusatsu"], width=220,
+            command=self._on_terminology_change,
+        )
+        self.terminology_menu.set(self.config_obj.terminology.capitalize())
+        self.terminology_menu.pack(side="left")
 
         ctk.CTkButton(frame, text="Save settings",
                       command=self._save_settings).pack(anchor="w", pady=14)
@@ -722,6 +754,7 @@ class LockInApp(ctk.CTk):
         title, body = message_for(
             action,
             era=self.current_era,
+            terminology=self.config_obj.terminology,
             app=window.display,
             remaining=self.session.format_remaining(),
             seconds=self.enforcer.seconds_on_blocked_app,
@@ -783,18 +816,20 @@ class LockInApp(ctk.CTk):
         overlay.protocol("WM_DELETE_WINDOW", lambda: None)   # the X button on this window does nothing
         self._lockdown_window = overlay
 
-        ctk.CTkLabel(overlay, text=lockdown_label_for(self.current_era),
+        ctk.CTkLabel(overlay, text=lockdown_label_for(self.current_era, self.config_obj.terminology),
                      font=ctk.CTkFont(size=54, weight="bold"),
                      text_color=self.color_focus).pack(pady=(220, 10))
 
-        ctk.CTkLabel(overlay, text=f"{self.session.format_remaining()} left in this mission",
+        remaining_word = "mission" if self._is_tokusatsu() else "session"
+        ctk.CTkLabel(overlay, text=f"{self.session.format_remaining()} left in this {remaining_word}",
                      font=ctk.CTkFont(size=20), text_color="#9aa4b2").pack()
 
         countdown = ctk.CTkLabel(overlay, text="", font=ctk.CTkFont(size=16),
                                  text_color="#6b7480")
         countdown.pack(pady=26)
 
-        ctk.CTkButton(overlay, text="Abort Mission", width=200,
+        end_button_text = "Abort Mission" if self._is_tokusatsu() else "End Session"
+        ctk.CTkButton(overlay, text=end_button_text, width=200,
                       fg_color="transparent", border_width=1,
                       text_color="#6b7480", hover_color="#1d2026",
                       command=self._end_session_from_lockdown).pack()
@@ -846,14 +881,17 @@ class LockInApp(ctk.CTk):
             self._close_lockdown()
 
         if phase is not Phase.IDLE:
-            self.notifier.phase_chime(phase.label)
+            label = label_for(phase, self.config_obj.terminology)
+            self.notifier.phase_chime(label)
             if phase.is_break:
                 self._show_banner(
-                    f"{phase.label} — {self.session.format_remaining()} remaining.",
+                    f"{label} — {self.session.format_remaining()} remaining.",
                     "low",
                 )
-            else:
+            elif self._is_tokusatsu():
                 self._show_banner("Henshin initiated. Blocking is active.", "low")
+            else:
+                self._show_banner("Focus session started. Blocking is active.", "low")
 
     def _on_phase_ended(self) -> None:
         self.monitor.pause()
@@ -912,7 +950,7 @@ class LockInApp(ctk.CTk):
         self.config_obj.save()
         self._apply_rider_theme()
         self.driver_label.configure(
-            text=f"DRIVER: {value.upper()}", text_color=self.color_rider_accent
+            text=f"{self._driver_prefix()}: {value.upper()}", text_color=self.color_rider_accent
         )
         self.start_button.configure(fg_color=self.color_rider_accent)
         self.header_frame.configure(fg_color=self.color_surface)
@@ -921,6 +959,26 @@ class LockInApp(ctk.CTk):
         # selected-tab highlight) pick up the new surface color and
         # accent — same trick already used when you switch appearance
         # mode, just triggered by a Rider change instead.
+        self._rebuild_tabs()
+
+    def _on_terminology_change(self, value: str) -> None:
+        """
+        Called when you flip the Wording switch between Professional and
+        Tokusatsu in Settings.
+
+        This changes words, not colors — but the words show up in a lot
+        of places at once (the button, the driver label, the settings
+        labels, the timer's own phase name), so the easiest way to make
+        sure every single one updates together is the same trick used
+        for a Rider change: rebuild everything from scratch.
+        """
+        self.config_obj.terminology = value.lower()
+        self.config_obj.save()
+        self.driver_label.configure(
+            text=f"{self._driver_prefix()}: {self.config_obj.rider_theme.upper()}"
+        )
+        self.start_button.configure(text=self._henshin_word())
+        self._refresh_timer_widgets()
         self._rebuild_tabs()
 
     def _rebuild_tabs(self) -> None:
@@ -1170,6 +1228,7 @@ class LockInApp(ctk.CTk):
     # ================================================================== #
     def _refresh_timer_widgets(self) -> None:
         phase = self.session.phase
+        label = label_for(phase, self.config_obj.terminology)
 
         self.time_label.configure(text=self.session.format_remaining())
         self.progress.set(self.session.progress)
@@ -1182,22 +1241,23 @@ class LockInApp(ctk.CTk):
         }[phase]
 
         suffix = " (paused)" if self.session.is_paused and phase is not Phase.IDLE else ""
-        self.phase_label.configure(text=phase.label + suffix, text_color=color)
+        self.phase_label.configure(text=label + suffix, text_color=color)
         self.time_label.configure(text_color=color)
         self.progress.configure(progress_color=color)
 
-        self.start_button.configure(text="Pause" if self.session.is_running else "Henshin")
+        self.start_button.configure(text="Pause" if self.session.is_running else self._henshin_word())
 
         done = self.session.completed_focus_blocks
         until_long = self.session.blocks_until_long_break
-        self.streak_label.configure(
-            text=f"{done} mission{'s' if done != 1 else ''} complete · Full Recovery in {until_long}",
-            text_color=COLOR_LOOK_ACCENT,
-        )
+        if self._is_tokusatsu():
+            streak_text = f"{done} mission{'s' if done != 1 else ''} complete · Full Recovery in {until_long}"
+        else:
+            streak_text = f"{done} session{'s' if done != 1 else ''} complete · Long break in {until_long}"
+        self.streak_label.configure(text=streak_text, text_color=COLOR_LOOK_ACCENT)
 
         # The title bar also shows a tiny timer, so it's visible even when
         # this window is hidden behind others.
-        self.title(f"{self.session.format_remaining()} · {phase.label} — Lock In")
+        self.title(f"{self.session.format_remaining()} · {label} — Lock In")
 
     def _update_watch_label(self, window: WindowInfo) -> None:
         if self.session.phase is Phase.FOCUS and self.monitor.is_active:

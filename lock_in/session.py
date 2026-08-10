@@ -45,13 +45,42 @@ class Phase(str, Enum):
 
     @property
     def label(self) -> str:
-        """The friendly name shown on screen."""
+        """The Kamen-Rider-flavored name shown on screen."""
         return {
             Phase.IDLE: "Standing By",
             Phase.FOCUS: "Henshin",
             Phase.SHORT_BREAK: "Recovery",
             Phase.LONG_BREAK: "Stand Down",
         }[self]
+
+    @property
+    def professional_label(self) -> str:
+        """The plain, ordinary name shown on screen."""
+        return {
+            Phase.IDLE: "Idle",
+            Phase.FOCUS: "Focus",
+            Phase.SHORT_BREAK: "Short Break",
+            Phase.LONG_BREAK: "Long Break",
+        }[self]
+
+
+# Plain, ordinary words are the app's normal voice. The Kamen Rider
+# flavor is something you turn ON, in Settings, not something you have
+# to turn off.
+DEFAULT_TERMINOLOGY = "professional"
+
+
+def label_for(phase: Phase, terminology: str = DEFAULT_TERMINOLOGY) -> str:
+    """
+    The phase name to show on screen, picking which voice to use.
+
+    Anything other than exactly "tokusatsu" (including a typo, or a
+    missing setting) quietly gives back the plain, professional name
+    instead of guessing wrong or crashing.
+    """
+    if terminology == "tokusatsu":
+        return phase.label
+    return phase.professional_label
 
 
 class Event(str, Enum):

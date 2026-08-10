@@ -315,15 +315,42 @@ class Enforcer:
 # The words shown at each step. Kept here in one place so the tone is
 # consistent, and the screen code doesn't need to know what to say.
 #
-# There's one full set of words per Kamen Rider era (Showa, Heisei,
-# Reiwa), so picking a different era of Rider in Settings doesn't just
-# repaint the app — it also talks to you a little differently:
-#   Showa  — an old base alarm: blunt, short, siren-like.
-#   Heisei — a tactical mission briefing. This is also the fallback set,
-#            used if we ever get handed an era name we don't recognise.
-#   Reiwa  — a modern digital system alert: crisp, a bit clinical.
+# There are two totally separate voices, controlled by two separate
+# settings:
+#   terminology="professional" (the normal, default voice) — plain,
+#       ordinary words. The same words no matter which Kamen Rider era
+#       is picked, since there's nothing tokusatsu about it.
+#   terminology="tokusatsu" — the Kamen Rider-flavored voice. THIS is
+#       the one that further splits into one full set of words per era
+#       (Showa, Heisei, Reiwa), so picking a different era of Rider
+#       doesn't just repaint the app — it also talks to you a little
+#       differently:
+#         Showa  — an old base alarm: blunt, short, siren-like.
+#         Heisei — a tactical mission briefing. Also the fallback set,
+#                  used if we ever get handed an era name we don't know.
+#         Reiwa  — a modern digital system alert: crisp, a bit clinical.
 # --------------------------------------------------------------------------- #
 DEFAULT_ERA = "Heisei"
+DEFAULT_TERMINOLOGY = "professional"
+
+MESSAGES_PROFESSIONAL = {
+    Action.WARN: (
+        "Off Task",
+        "{app} isn't part of your focus block. {time} remaining.",
+    ),
+    Action.NAG: (
+        "Still Off Task",
+        "{seconds}s on {app}. {time} left — consider returning to your task.",
+    ),
+    Action.MINIMIZE: (
+        "Window Minimized",
+        "{app} was minimized. {time} remaining.",
+    ),
+    Action.LOCKDOWN: (
+        "Screen Locked",
+        "Locked for {lockdown}s. Take a moment, then resume.",
+    ),
+}
 
 MESSAGES_BY_ERA = {
     "Showa": {
@@ -382,28 +409,39 @@ MESSAGES_BY_ERA = {
     },
 }
 
-# The big shouted words on the full-screen lockdown cover, one per era.
+# The big shouted words on the full-screen lockdown cover, one per era
+# (tokusatsu mode only — professional mode has one label for every era).
 LOCKDOWN_LABELS = {
     "Showa": "BASE LOCKDOWN.",
     "Heisei": "LOCKDOWN ENGAGED.",
     "Reiwa": "SYSTEM LOCKDOWN.",
 }
+LOCKDOWN_LABEL_PROFESSIONAL = "SCREEN LOCKED."
 
 
-def message_for(action: Action, *, app: str, remaining: str,
-                seconds: int, lockdown: int, era: str = DEFAULT_ERA) -> tuple[str, str]:
+def message_for(action: Action, *, app: str, remaining: str, seconds: int, lockdown: int,
+                era: str = DEFAULT_ERA, terminology: str = DEFAULT_TERMINOLOGY) -> tuple[str, str]:
     """
-    Fill in the blanks for `action`'s message, in the voice of `era`.
+    Fill in the blanks for `action`'s message, in the voice of `terminology`.
 
-    If `era` isn't one we know, we quietly use the Heisei words instead
-    of crashing — a typo in a saved settings file shouldn't break the app.
+    Professional mode has one plain voice, the same no matter which era
+    is picked. Tokusatsu mode picks one of the era voices — and if `era`
+    isn't one we know, quietly falls back to the Heisei words instead of
+    crashing. Anything other than exactly "tokusatsu" for `terminology`
+    (including a typo, or nothing at all) quietly gives the professional
+    words instead — a broken settings file should never break the app.
     """
-    messages = MESSAGES_BY_ERA.get(era, MESSAGES_BY_ERA[DEFAULT_ERA])
+    if terminology == "tokusatsu":
+        messages = MESSAGES_BY_ERA.get(era, MESSAGES_BY_ERA[DEFAULT_ERA])
+    else:
+        messages = MESSAGES_PROFESSIONAL
     title, body = messages[action]
     return title, body.format(app=app, time=remaining, seconds=int(seconds),
                               lockdown=lockdown)
 
 
-def lockdown_label_for(era: str) -> str:
-    """The big shouted words on the full-screen lockdown cover, for this era."""
-    return LOCKDOWN_LABELS.get(era, LOCKDOWN_LABELS[DEFAULT_ERA])
+def lockdown_label_for(era: str, terminology: str = DEFAULT_TERMINOLOGY) -> str:
+    """The big shouted words on the full-screen lockdown cover."""
+    if terminology == "tokusatsu":
+        return LOCKDOWN_LABELS.get(era, LOCKDOWN_LABELS[DEFAULT_ERA])
+    return LOCKDOWN_LABEL_PROFESSIONAL

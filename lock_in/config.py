@@ -172,6 +172,7 @@ class Config:
     appearance: str = "dark"              # "dark" | "light" | "system"
     accent: str = "blue"                  # the app's color theme
     rider_theme: str = "Kamen Rider (1971)"   # which Kamen Rider's colors to use
+    terminology: str = "professional"     # "professional" | "tokusatsu" — which words to use
 
     # ------------------------------------------------------------------ #
     # Persistence

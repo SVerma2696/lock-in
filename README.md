@@ -156,25 +156,42 @@ If you *do* want pixels later, the seam is clean: swap in anything that returns
 
 ---
 
+## Wording
+
+Settings → "Wording" switches the app's words between two voices:
+
+- **Professional** (the default) — plain, ordinary words: "Focus", "Start",
+  "Off Task", "Screen Locked". Nothing Kamen-Rider-specific about it, and
+  it reads the same no matter which Rider theme is picked.
+- **Tokusatsu** — the Kamen-Rider-flavored voice this app shipped with
+  originally: "Henshin", "Off Mission", "LOCKDOWN ENGAGED.", and so on.
+  This is the one that further changes per era (see the table below).
+
+This only changes words — colors, patterns, and sounds from the Kamen
+Rider theme (below) apply either way. `lock_in/session.py` (`label_for`)
+and `lock_in/enforcer.py` (`MESSAGES_PROFESSIONAL` vs `MESSAGES_BY_ERA`)
+hold the two voices; an unrecognized value in a corrupted `config.json`
+quietly falls back to professional rather than crashing.
+
 ## Kamen Rider theme
 
-Settings → "Kamen Rider theme" picks from all 38 Rider series (Showa,
-Heisei, and Reiwa era), each with its own accent-color pair pulled from
-that Rider's actual suit colors. This isn't just a couple of small
-accents — the header panel, the tab bar, and every tab's content panel
-are tinted toward the Rider's primary color too (near-black in dark mode,
-pale in light mode — same underlying hue either way, so it reads as "the
-same theme" in both), along with the Henshin button, the selected-tab
-highlight, the timer digits/progress bar during a focus block, and the
-"DRIVER: <name>" label. The fixed per-section colors (pink for Claude
-fallback, teal for sound/notification settings, and so on) stay as they
-are, since those work like a legend to tell sections apart regardless of
-theme. Defaults to the original 1971 series. See `lock_in/rider_themes.py`
-for the full palette.
+Settings → "Kamen Rider theme" (called "Color theme" when Wording is set
+to Professional) picks from all 38 Rider series (Showa, Heisei, and Reiwa
+era), each with its own accent-color pair pulled from that Rider's actual
+suit colors. This isn't just a couple of small accents — the header
+panel, the tab bar, and every tab's content panel are tinted toward the
+Rider's primary color too (near-black in dark mode, pale in light mode —
+same underlying hue either way, so it reads as "the same theme" in both),
+along with the Henshin/Start button, the selected-tab highlight, the
+timer digits/progress bar during a focus block, and the small
+"DRIVER:"/"THEME:" label under the timer. The fixed per-section colors
+(pink for Claude fallback, teal for sound/notification settings, and so
+on) stay as they are, since those work like a legend to tell sections
+apart regardless of theme. Defaults to the original 1971 series. See
+`lock_in/rider_themes.py` for the full palette.
 
-Picking a Rider also picks its **era**, and the era changes more than
-color — three further things read as genuinely different depending on
-whether you're on a Showa, Heisei, or Reiwa Rider:
+Picking a Rider also picks its **era**, and — when Wording is set to
+Tokusatsu — the era changes more than color, too:
 
 | | Showa (1971–1994) | Heisei (2000–2019) | Reiwa (2019–present) |
 |---|---|---|---|
@@ -183,11 +200,14 @@ whether you're on a Showa, Heisei, or Reiwa Rider:
 | **Divider strip** | Tick marks, like a gauge | A row of tiny diamonds | A dashed line with square nodes |
 | **Sound cue** | A plain two-tone alarm | The original beep sequence this app shipped with | A quicker, higher-pitched digital-sounding sequence |
 
-Heisei is the fallback voice/pattern/sound if the app is ever handed a
-Rider name it doesn't recognize, so nothing crashes on a corrupted
-`config.json`. All three eras of copy live in `lock_in/enforcer.py`
-(`MESSAGES_BY_ERA`), the patterns in `lock_in/visuals.py`, and the sound
-tables in `lock_in/notifier.py`.
+In Professional wording, the Voice column above doesn't apply — there's
+one plain voice for every era. The background pattern, divider strip,
+and sound cue still vary by era either way. Heisei is the fallback
+voice/pattern/sound if the app is ever handed a Rider name it doesn't
+recognize, so nothing crashes on a corrupted `config.json`. All three
+eras of tokusatsu copy live in `lock_in/enforcer.py` (`MESSAGES_BY_ERA`),
+the patterns in `lock_in/visuals.py`, and the sound tables in
+`lock_in/notifier.py`.
 
 ### Look and feel
 
@@ -444,10 +464,11 @@ Lock In/
 │
 ├── tests/
 │   ├── test_session.py         State machine: transitions, pause, skip, formatting,
-│   │                           and the serious-tokusatsu phase labels.
+│   │                           and both wording voices' phase labels.
 │   ├── test_classifier.py      Tokenizer, prediction, online learning, persistence.
 │   ├── test_enforcer.py        Rule precedence, full escalation ladder, decay,
-│   │                           per-era notification copy, cross-platform process matching.
+│   │                           per-era and per-wording notification copy,
+│   │                           cross-platform process matching.
 │   ├── test_observations.py    De-duplication, labelling, JSONL round-trip.
 │   ├── test_claude_fallback.py Caching, async lookup, failure handling — no
 │   │                           real network calls, a fake client stands in.
