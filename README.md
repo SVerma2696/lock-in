@@ -1,33 +1,140 @@
-# Lock In
+# Lock In 🎭⏱️
 
 A Pomodoro timer that notices when you've drifted onto Discord and does
 something about it — Henshin into a focus block, and Lock In makes
-leaving it a deliberate decision, not an absent-minded one.
-
-Three things, from the original sketch:
-
-1. **Pomodoro cycles** — focus / short break / long break, configurable, with
-   pause, skip, and a streak counter.
-2. **App blocking during focus** — a block list, an allow list, and an
-   escalating response when you're somewhere you said you didn't want to be.
-3. **A learned model** that recognises non-study apps you never listed, and
-   gets better every time you correct it.
+leaving it a deliberate decision, not an absent-minded one. It's also a
+from-scratch Naive Bayes classifier, a 38-way runtime theming engine, and
+a cross-platform desktop app, built to learn all three.
 
 ---
 
-## Quick start
+## 📂 Project Structure
 
+```
+Lock In/
+│
+├── main.py                     Entry point. Checks dependencies, launches the UI.
+├── train.py                    Training CLI (record / label / rebuild / eval / …).
+│
+├── lock_in/                    The application package.
+│   ├── __init__.py             Marks this folder as a package.
+│   │
+│   │   ── pure logic, stdlib only, fully unit-tested ──
+│   ├── config.py               Settings dataclass, JSON persistence, block/allow
+│   │                           defaults, and the %APPDATA% path resolution.
+│   ├── session.py              Pomodoro state machine. Injectable clock, so tests
+│   │                           run four-hour sessions instantly.
+│   ├── classifier.py           Naive Bayes study/distraction model, tokenizer,
+│   │                           seed corpus, explain(), JSON persistence.
+│   ├── enforcer.py             judge() applies allowlist → blocklist → model.
+│   │                           Enforcer() runs the strike/escalation ladder.
+│   ├── observations.py         Records every window seen during focus and tracks
+│   │                           which have been labelled. Backs train.py.
+│   ├── rider_themes.py         Kamen Rider color palettes for the theme toggle.
+│   ├── visuals.py               Display font pick, plus Pillow-generated glow,
+│   │                           background art, and app-icon loading.
+│   ├── assets/
+│   │   └── app_icon.png         The app's own picture — window/taskbar icon
+│   │                           and notification icon.
+│   │
+│   │   ── platform-facing shells, thin by design ──
+│   ├── monitor.py              Foreground-window polling on a daemon thread.
+│   │                           Win32 backend, macOS (osascript), Linux (xdotool).
+│   ├── notifier.py             Toasts and sounds: winotify/winsound (Windows),
+│   │                           osascript/afplay (macOS), notify-send/paplay (Linux).
+│   └── ui.py                   CustomTkinter front end. The only module that
+│                               imports tkinter.
+│
+├── tests/
+│   ├── test_session.py         State machine: transitions, pause, skip, formatting,
+│   │                           and both wording voices' phase labels.
+│   ├── test_classifier.py      Tokenizer, prediction, online learning, persistence.
+│   ├── test_enforcer.py        Rule precedence, full escalation ladder, decay,
+│   │                           per-era and per-wording notification copy,
+│   │                           cross-platform process matching.
+│   ├── test_observations.py    De-duplication, labelling, JSONL round-trip.
+│   ├── test_claude_fallback.py Caching, async lookup, failure handling — no
+│   │                           real network calls, a fake client stands in.
+│   ├── test_rider_themes.py    Palette completeness, color validity, dark-mode
+│   │                           shade generation, contrast-safe text colors.
+│   ├── test_visuals.py         Font lookup, glow shape/fade, per-era background
+│   │                           and divider differences, light/dark contrast,
+│   │                           app-icon loading/padding.
+│   ├── test_notifier.py        Era-to-sound-cue selection logic (Windows tones,
+│   │                           macOS/Linux sound tables).
+│   └── smoke_ui.py             Headless end-to-end run under Xvfb (not pytest).
+│
+├── .github/workflows/
+│   ├── tests.yml               Runs pytest on Windows, macOS, and Linux on every push.
+│   └── release.yml             Builds and publishes installers on a version tag.
+│
+├── requirements.txt
+├── pytest.ini
+├── run.bat                     Launches with pythonw (no console window).
+└── build.bat                   PyInstaller one-file build.
+```
+
+Runtime data lives outside the project, in `%APPDATA%\Lock In\` (see
+[Config](#-config) below) — deliberately, so a PyInstaller build still
+writes correctly even if its own install folder is read-only.
+
+---
+
+## ⚙️ Features
+
+* Runs a configurable **Pomodoro cycle** (focus / short break / long
+  break) with pause, skip, and a streak counter.
+* **Blocks distracting apps during focus** using an allow list, a block
+  list, and an escalating enforcement ladder — toast, then toast+sound,
+  then window minimize, then a full-screen lockdown — switchable between
+  a gentle "soft mode" and an immediate "hard mode".
+* Learns your habits with a **from-scratch Naive Bayes classifier**
+  trained on window titles and process names, correctable in one click
+  from the Activity tab, with instant online updates and zero external
+  ML dependencies.
+* Switches between **38 Kamen Rider color themes** (Showa / Heisei /
+  Reiwa era), each pulling its accent colors from that Rider's real suit
+  colors and re-tinting the header, every tab panel, the progress bar,
+  and a themed background pattern — not just a couple of small accents.
+* Toggles between **Professional and Tokusatsu wording** app-wide, so
+  the exact same install reads as a plain productivity tool or a fully
+  Kamen-Rider-flavored one, your choice.
+* Optional **Claude API fallback** for the rare window the local model
+  can't confidently classify — off by default, and even when on, sends
+  only a window title, never a screenshot or any other context.
+* Fully **cross-platform** (Windows / macOS / Linux), with
+  platform-appropriate window detection, minimizing, notifications, and
+  sounds, and graceful feature-detection fallbacks anywhere a capability
+  isn't available.
+
+---
+
+## 🚀 How to Run
+
+### 1. Clone this repository
+```bat
+git clone https://github.com/SVerma2696/lock-in.git
+cd lock-in
+```
+
+### 2. Install dependencies
+Make sure you have Python 3.11+ installed, then run:
 ```bat
 pip install -r requirements.txt
+```
+
+### 3. Run it
+```bat
 python main.py
 ```
+Or double-click `run.bat` (launches with `pythonw`, no console window).
+To produce a standalone `.exe`, run `build.bat` — or just grab a
+[prebuilt release](#-releases) for your OS instead of building from
+source.
 
-Or double-click `run.bat`. To produce a standalone `.exe`, run `build.bat`.
-Training happens through a separate CLI — see [Training it](#training-it):
-
-```bat
-python train.py label
-```
+*(Optional step 4: turn on the [Claude fallback](#claude-fallback-optional-off-by-default)
+if you want a second opinion on ambiguous windows — entirely optional,
+and off by default.)*
 
 `customtkinter` and `Pillow` are required for the app to *open* — Pillow
 draws the glow and background art. On Windows, `pywin32` and `psutil` are
@@ -43,6 +150,75 @@ be doing anything, run `pip install -r requirements.txt` again and make sure
 it installs `pywin32` and `psutil` without errors. The app also now shows a
 red banner on startup, and a note on the Blocking tab, if it can't detect
 windows — but it's worth checking directly if you're not sure.
+
+---
+
+## 🔌 System Integrations (Data Flow)
+
+### Enforcement loop
+```
+Foreground window (title + process) -> judge() [lock_in/enforcer.py] -> Verdict
+Verdict -> Enforcer.update()                    -> Action (warn/nag/minimize/lockdown)
+Action  -> Notifier (toast + sound) and ui.py    -> banner / full-screen lockdown
+```
+
+### Training loop
+```
+Every window seen during focus -> ObservationStore (observations.jsonl)
+Corrections (Activity tab, or `train.py label`) -> NaiveBayesClassifier.learn() -> model.json
+```
+
+### Claude fallback (optional, off by default)
+```
+Ambiguous window title ONLY (never a screenshot) -> Claude API (claude-haiku-4-5)
+Claude's answer -> also folded into observations.jsonl, so the local model
+                   needs Claude less and less over time
+```
+
+**Note:** the Claude tier only ever sees a window title/process-name
+string — see [What actually gets sent](#what-actually-gets-sent) for the
+test that pins this down.
+
+---
+
+## 📘 Concepts Demonstrated
+
+* **From-scratch Naive Bayes classification** — Laplace smoothing,
+  log-space scoring to avoid float underflow, and a per-token
+  `explain()` method, with no ML framework dependency at all.
+* **Thread-safe GUI architecture** — a daemon polling thread that only
+  ever does `queue.put()`; all judging, enforcement, and widget updates
+  happen on the Tk main thread via an `after()` heartbeat.
+* **Cross-platform OS integration** — Win32 (`pywin32`) window
+  detection/minimizing, macOS AppleScript automation, Linux
+  `xdotool`/X11 — each with honest, tested fallback behavior when a
+  capability isn't available, rather than a silent no-op.
+* **Runtime-generated UI art** — glow, background patterns, divider
+  strips, and app-icon padding are all rendered on the fly with Pillow,
+  not shipped as static image assets.
+* **A composable theming system** — 38 palettes × 2 wording voices × 3
+  tokusatsu eras, built from a handful of small color-math primitives
+  (`lighten`, `darken`, perceptual-brightness-based text-color
+  selection) instead of hand-picked per combination.
+* **Test-driven development throughout** — the pure-logic modules
+  (`session.py`, `enforcer.py`, `classifier.py`, `rider_themes.py`) are
+  fully unit-tested with no display server; GUI changes are verified by
+  programmatically driving the real CustomTkinter app and inspecting
+  rendered screenshots.
+
+---
+
+## 🔧 Requirements
+
+* Python 3.11+
+* `customtkinter`, `Pillow` (required — the app won't open without them)
+* **Windows:** `pywin32`, `psutil` (blocking), `winotify` (toasts) —
+  optional, but blocking silently does nothing without them
+* **macOS:** `osascript`, `afplay` (both built in)
+* **Linux:** `xdotool` (X11 only — no Wayland equivalent), `notify-send`,
+  `paplay`/`aplay` (all optional, install via your package manager)
+* Optional: the `anthropic` SDK + an API key, only if you turn on the
+  [Claude fallback](#claude-fallback-optional-off-by-default)
 
 ---
 
@@ -96,7 +272,7 @@ being on the block list still catches a window titled "Steam" even if we
 never learned its process name. If blocking still doesn't seem to be working
 at all, check the Blocking tab: if it says "App detection unavailable" (or
 you see a red banner about `pywin32`/`psutil` when the app starts), those two
-packages aren't installed and nothing can be detected — see Quick start.
+packages aren't installed and nothing can be detected — see How to Run.
 
 ### On "spam notifications"
 
@@ -173,6 +349,8 @@ and `lock_in/enforcer.py` (`MESSAGES_PROFESSIONAL` vs `MESSAGES_BY_ERA`)
 hold the two voices; an unrecognized value in a corrupted `config.json`
 quietly falls back to professional rather than crashing.
 
+---
+
 ## Kamen Rider theme
 
 Settings → "Kamen Rider theme" (called "Color theme" when Wording is set
@@ -233,6 +411,19 @@ to whichever Rider is picked:
   up in a strip that thin, so this is its own small-scale motif per era:
   tick marks for Showa, tiny diamonds for Heisei, a dashed circuit trace
   for Reiwa (`make_panel_divider()` in `lock_in/visuals.py`).
+
+**Contrast safety.** A Rider's `primary`/`secondary` are also used
+directly as *text* colors in a few places (the phase name and timer
+digits, the driver label, the Henshin button, the selected tab). A color
+that's already very pale (Fourze's pure white) or very saturated can end
+up too close to its own tinted background to read — so those specific
+spots use `RiderTheme.primary_text_pair` / `secondary_text_pair` /
+`button_text_pair` instead of the raw color: darkened for light mode and
+lightened for dark mode (or, for text sitting directly on a filled
+button, plain black or white chosen by perceived brightness). All 38
+Riders are checked for this in `tests/test_rider_themes.py`, in both
+appearance modes, so a future palette edit can't quietly reintroduce
+invisible text.
 
 ### App icon
 
@@ -357,6 +548,8 @@ Rough guide:
 Until the model has a few hundred examples, the block and allow lists carry the
 real load — they're exact matches and need no training at all.
 
+---
+
 ## Claude fallback (optional, off by default)
 
 A fourth tier, behind everything else:
@@ -425,79 +618,7 @@ accidentally widen it.
   down, malformed reply — all of it degrades to "no opinion, allow it," never
   a crash. A misconfigured key can't turn into a broken Pomodoro timer.
 
-## Project structure
-
-```
-Lock In/
-│
-├── main.py                     Entry point. Checks dependencies, launches the UI.
-├── train.py                    Training CLI (record / label / rebuild / eval / …).
-│
-├── lock_in/                    The application package.
-│   ├── __init__.py             Marks this folder as a package.
-│   │
-│   │   ── pure logic, stdlib only, fully unit-tested ──
-│   ├── config.py               Settings dataclass, JSON persistence, block/allow
-│   │                           defaults, and the %APPDATA% path resolution.
-│   ├── session.py              Pomodoro state machine. Injectable clock, so tests
-│   │                           run four-hour sessions instantly.
-│   ├── classifier.py           Naive Bayes study/distraction model, tokenizer,
-│   │                           seed corpus, explain(), JSON persistence.
-│   ├── enforcer.py             judge() applies allowlist → blocklist → model.
-│   │                           Enforcer() runs the strike/escalation ladder.
-│   ├── observations.py         Records every window seen during focus and tracks
-│   │                           which have been labelled. Backs train.py.
-│   ├── rider_themes.py         Kamen Rider color palettes for the theme toggle.
-│   ├── visuals.py               Display font pick, plus Pillow-generated glow,
-│   │                           background art, and app-icon loading.
-│   ├── assets/
-│   │   └── app_icon.png         The app's own picture — window/taskbar icon
-│   │                           and notification icon.
-│   │
-│   │   ── platform-facing shells, thin by design ──
-│   ├── monitor.py              Foreground-window polling on a daemon thread.
-│   │                           Win32 backend, macOS (osascript), Linux (xdotool).
-│   ├── notifier.py             Toasts and sounds: winotify/winsound (Windows),
-│   │                           osascript/afplay (macOS), notify-send/paplay (Linux).
-│   └── ui.py                   CustomTkinter front end. The only module that
-│                               imports tkinter.
-│
-├── tests/
-│   ├── test_session.py         State machine: transitions, pause, skip, formatting,
-│   │                           and both wording voices' phase labels.
-│   ├── test_classifier.py      Tokenizer, prediction, online learning, persistence.
-│   ├── test_enforcer.py        Rule precedence, full escalation ladder, decay,
-│   │                           per-era and per-wording notification copy,
-│   │                           cross-platform process matching.
-│   ├── test_observations.py    De-duplication, labelling, JSONL round-trip.
-│   ├── test_claude_fallback.py Caching, async lookup, failure handling — no
-│   │                           real network calls, a fake client stands in.
-│   ├── test_rider_themes.py    Palette completeness, color validity, dark-mode
-│   │                           shade generation.
-│   ├── test_visuals.py         Font lookup, glow shape/fade, per-era background
-│   │                           and divider differences, light/dark contrast,
-│   │                           app-icon loading/padding.
-│   ├── test_notifier.py        Era-to-sound-cue selection logic (Windows tones,
-│   │                           macOS/Linux sound tables).
-│   └── smoke_ui.py             Headless end-to-end run under Xvfb (not pytest).
-│
-├── .github/workflows/
-│   ├── tests.yml               Runs pytest on Windows, macOS, and Linux on every push.
-│   └── release.yml             Builds and publishes installers on a version tag.
-│
-├── requirements.txt
-├── pytest.ini
-├── run.bat                     Launches with pythonw (no console window).
-└── build.bat                   PyInstaller one-file build.
-```
-
-Runtime data lives outside the project, in `%APPDATA%\Lock In\`:
-
-```
-config.json          your settings
-model.json           the trained classifier — readable, worth opening once
-observations.jsonl   every window seen during focus, one JSON object per line
-```
+---
 
 ### Why it's split this way
 
@@ -526,7 +647,9 @@ pytest                                   :: runs the unit test suite
 xvfb-run -a python tests/smoke_ui.py     :: end-to-end, needs a display
 ```
 
-## Config
+---
+
+## 🔧 Config
 
 Settings, the trained model, and your training data all live in
 `%APPDATA%\Lock In\` — outside the project directory, so a PyInstaller build
@@ -551,6 +674,8 @@ opted into it, the Claude fallback's ambiguous-window titles (see above).
 `config.json` only stores whether the fallback is *enabled* and which model to
 use — never the key itself.
 
+---
+
 ## Known limits
 
 - **Windows, macOS, and Linux are all supported**, though Windows has the
@@ -571,7 +696,9 @@ use — never the key itself.
   seed corpus and not your habits. The block and allow lists work perfectly from
   minute one; the classifier is the part that earns its keep over a few weeks.
 
-## Releases
+---
+
+## 🚀 Releases
 
 Tagged releases (`vX.Y.Z`) are built automatically for Windows, macOS,
 and Linux via GitHub Actions and published to
@@ -584,6 +711,26 @@ request also runs the test suite on all three OSes
 The macOS build isn't code-signed or notarized, so Gatekeeper will call it
 from an "unidentified developer" the first time you open it — right-click
 → Open once to bypass that.
+
+---
+
+## 🎓 Credits & Professional Attributions
+
+This is a personal project built for learning and portfolio purposes.
+**Kamen Rider**, the names of all 38 series referenced in the theme
+picker, and all associated characters and likenesses are trademarks of
+**Ishimori Productions** and **TV Asahi**. They're used here strictly as
+color and flavor-text inspiration for a personal productivity tool, with
+no commercial intent — no official footage, artwork, or trademarked
+imagery is bundled with this app or its source. Every visual element
+(glow, background pattern, divider strip, app-icon padding) is generated
+at runtime from plain hex color codes in `lock_in/visuals.py`, not from
+any copyrighted asset.
+
+The app icon (`lock_in/assets/app_icon.png`) was supplied by the
+project's author.
+
+---
 
 ## License
 

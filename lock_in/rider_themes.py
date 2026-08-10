@@ -58,6 +58,22 @@ def darken(hex_color: str, factor: float = 0.35) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def readable_text_color(hex_color: str) -> str:
+    """
+    Pick plain black or white, whichever one shows up more clearly on
+    top of `hex_color`.
+
+    This uses a well-known trick for "how bright does this color LOOK
+    to a person" — green looks much brighter than blue even at the same
+    number, so we weigh each color a different amount instead of just
+    averaging them.
+    """
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    perceived_brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return "#000000" if perceived_brightness > 150 else "#ffffff"
+
+
 @dataclass(frozen=True)
 class RiderTheme:
     """One Rider's two colors, plus which era and year they're from."""
@@ -91,6 +107,46 @@ class RiderTheme:
         theme applied at all.
         """
         return (lighten(self.primary, 0.90), darken(self.primary, 0.72))
+
+    @property
+    def primary_text_pair(self) -> tuple[str, str]:
+        """
+        A version of `primary` that's always safe to use as TEXT sitting
+        on top of this theme's own `surface_pair` — unlike `primary_pair`
+        (which is the plain, vivid color, meant for things like the
+        progress bar), this one is always darkened for light mode and
+        lightened for dark mode.
+
+        Without this, a Rider whose primary color is already very pale
+        (like Fourze's pure white) would have text that's the EXACT
+        same color as its own pale light-mode background — invisible.
+        Pushing the text color further in the opposite direction from
+        the surface color fixes that for every Rider, not just the
+        obviously pale ones.
+        """
+        return (darken(self.primary, 0.35), lighten(self.primary, 0.35))
+
+    @property
+    def secondary_text_pair(self) -> tuple[str, str]:
+        """The same idea as `primary_text_pair`, but for `secondary`."""
+        return (darken(self.secondary, 0.35), lighten(self.secondary, 0.35))
+
+    @property
+    def button_text_pair(self) -> tuple[str, str]:
+        """
+        The right text color to sit directly ON TOP of `secondary_pair`
+        (used for the words on the Henshin button itself).
+
+        This is a different problem than the two pairs above: those mix
+        in some black or white to create a paler/darker VARIANT of a
+        color for text to sit *near*. This one has to sit *directly on
+        top of* secondary_pair's exact color, so a tinted variant isn't
+        enough — it needs plain black or white, whichever actually
+        shows up, picked separately for each of light and dark mode
+        since secondary_pair itself is a different shade in each.
+        """
+        light_fill, dark_fill = self.secondary_pair
+        return (readable_text_color(light_fill), readable_text_color(dark_fill))
 
 
 RIDER_THEMES: dict[str, RiderTheme] = {

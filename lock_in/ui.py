@@ -46,7 +46,7 @@ from .enforcer import Action, Enforcer, Reason, WindowInfo, judge, lockdown_labe
 from .monitor import BACKEND_AVAILABLE, ActiveWindowMonitor, minimize_window
 from .notifier import Notifier
 from .session import Event, Phase, PomodoroSession, label_for
-from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES
+from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES, lighten
 from .visuals import (
     display_font_family,
     load_app_icon,
@@ -239,6 +239,19 @@ class LockInApp(ctk.CTk):
         # way. This is what makes the header and tabs themselves change
         # color, not just a button and a label.
         self.color_surface = theme.surface_pair
+        # These are for WORDS specifically, not fills or bars — they're
+        # always readable on top of whatever they're meant to sit on,
+        # even for a Rider whose own color is almost white or almost
+        # black. Without these, a Rider like Fourze (pure white) would
+        # have text that's the exact same color as its own background —
+        # invisible.
+        self.color_focus_text = theme.primary_text_pair
+        self.color_driver_text = theme.secondary_text_pair
+        self.color_button_text = theme.button_text_pair
+        # The lockdown screen's cover is always dark, no matter which
+        # appearance mode you're in, so its words just need to always be
+        # bright — one plain color, not a light/dark pair.
+        self.color_lockdown_text = lighten(theme.primary, 0.35)
         # Which era this Rider is from (Showa/Heisei/Reiwa) — this also
         # picks the notification wording, the lockdown screen's big
         # words, the background pattern shape, and the sound cues.
@@ -368,7 +381,7 @@ class LockInApp(ctk.CTk):
         self.driver_label = ctk.CTkLabel(
             header, text=f"{self._driver_prefix()}: {self.config_obj.rider_theme.upper()}",
             font=ctk.CTkFont(family=DISPLAY_FONT, size=10, weight="bold"),
-            text_color=self.color_rider_accent,
+            text_color=self.color_driver_text,
         )
         self.driver_label.pack(pady=(2, 0))
 
@@ -387,7 +400,7 @@ class LockInApp(ctk.CTk):
         self.start_button = ctk.CTkButton(
             controls, text=self._henshin_word(), width=140, height=40,
             font=ctk.CTkFont(family=DISPLAY_FONT, size=15, weight="bold"), command=self._on_toggle,
-            fg_color=self.color_rider_accent,
+            fg_color=self.color_rider_accent, text_color=self.color_button_text,
         )
         self.start_button.grid(row=0, column=0, padx=6)
 
@@ -425,6 +438,7 @@ class LockInApp(ctk.CTk):
             self, height=340,
             fg_color=self.color_surface,
             segmented_button_selected_color=self.color_rider_accent,
+            text_color=self.color_button_text,
         )
         self.tabs.pack(fill="both", expand=True, padx=20, pady=(0, 16))
 
@@ -616,13 +630,26 @@ class LockInApp(ctk.CTk):
 
         terminology_row = ctk.CTkFrame(frame, fg_color="transparent")
         terminology_row.pack(fill="x", pady=(10, 4))
-        ctk.CTkLabel(terminology_row, text="Wording", width=260, anchor="w").pack(side="left")
-        self.terminology_menu = ctk.CTkOptionMenu(
-            terminology_row, values=["Professional", "Tokusatsu"], width=220,
-            command=self._on_terminology_change,
+        ctk.CTkLabel(terminology_row, text="Wording", width=140, anchor="w").pack(side="left")
+
+        # A switch you can see the state of at a glance: "Professional"
+        # printed in the same color the switch turns when it's off,
+        # "Tokusatsu" printed in the color it turns when it's on.
+        ctk.CTkLabel(terminology_row, text="Professional", font=ctk.CTkFont(size=12),
+                     text_color=COLOR_LOOK_ACCENT).pack(side="left", padx=(0, 8))
+        self.terminology_switch = ctk.CTkSwitch(
+            terminology_row, text="",
+            fg_color=COLOR_LOOK_ACCENT,          # the switch's color when it's OFF (Professional)
+            progress_color=COLOR_ENFORCE_ACCENT,  # the switch's color when it's ON (Tokusatsu)
+            command=self._on_terminology_switch_toggled,
         )
-        self.terminology_menu.set(self.config_obj.terminology.capitalize())
-        self.terminology_menu.pack(side="left")
+        if self._is_tokusatsu():
+            self.terminology_switch.select()
+        else:
+            self.terminology_switch.deselect()
+        self.terminology_switch.pack(side="left", padx=8)
+        ctk.CTkLabel(terminology_row, text="Tokusatsu", font=ctk.CTkFont(size=12),
+                     text_color=COLOR_ENFORCE_ACCENT).pack(side="left")
 
         ctk.CTkButton(frame, text="Save settings",
                       command=self._save_settings).pack(anchor="w", pady=14)
@@ -818,7 +845,7 @@ class LockInApp(ctk.CTk):
 
         ctk.CTkLabel(overlay, text=lockdown_label_for(self.current_era, self.config_obj.terminology),
                      font=ctk.CTkFont(size=54, weight="bold"),
-                     text_color=self.color_focus).pack(pady=(220, 10))
+                     text_color=self.color_lockdown_text).pack(pady=(220, 10))
 
         remaining_word = "mission" if self._is_tokusatsu() else "session"
         ctk.CTkLabel(overlay, text=f"{self.session.format_remaining()} left in this {remaining_word}",
@@ -950,9 +977,9 @@ class LockInApp(ctk.CTk):
         self.config_obj.save()
         self._apply_rider_theme()
         self.driver_label.configure(
-            text=f"{self._driver_prefix()}: {value.upper()}", text_color=self.color_rider_accent
+            text=f"{self._driver_prefix()}: {value.upper()}", text_color=self.color_driver_text
         )
-        self.start_button.configure(fg_color=self.color_rider_accent)
+        self.start_button.configure(fg_color=self.color_rider_accent, text_color=self.color_button_text)
         self.header_frame.configure(fg_color=self.color_surface)
         self._refresh_timer_widgets()
         # Rebuilding the tabs is how the tab panels themselves (and the
@@ -960,6 +987,11 @@ class LockInApp(ctk.CTk):
         # accent — same trick already used when you switch appearance
         # mode, just triggered by a Rider change instead.
         self._rebuild_tabs()
+
+    def _on_terminology_switch_toggled(self) -> None:
+        """Called when you click the Wording switch itself."""
+        value = "Tokusatsu" if self.terminology_switch.get() else "Professional"
+        self._on_terminology_change(value)
 
     def _on_terminology_change(self, value: str) -> None:
         """
@@ -1233,17 +1265,28 @@ class LockInApp(ctk.CTk):
         self.time_label.configure(text=self.session.format_remaining())
         self.progress.set(self.session.progress)
 
-        color = {
+        # The progress bar's fill uses the plain, vivid Rider color — but
+        # the WORDS use the separate, always-readable version instead,
+        # since a word-colored-exactly-like-its-own-background is a word
+        # nobody can read (this is exactly the bug some Riders, like
+        # Fourze's pure white, used to have).
+        fill_color = {
             Phase.FOCUS: self.color_focus,
+            Phase.SHORT_BREAK: COLOR_BREAK,
+            Phase.LONG_BREAK: COLOR_BREAK,
+            Phase.IDLE: COLOR_IDLE,
+        }[phase]
+        text_color = {
+            Phase.FOCUS: self.color_focus_text,
             Phase.SHORT_BREAK: COLOR_BREAK,
             Phase.LONG_BREAK: COLOR_BREAK,
             Phase.IDLE: COLOR_IDLE,
         }[phase]
 
         suffix = " (paused)" if self.session.is_paused and phase is not Phase.IDLE else ""
-        self.phase_label.configure(text=label + suffix, text_color=color)
-        self.time_label.configure(text_color=color)
-        self.progress.configure(progress_color=color)
+        self.phase_label.configure(text=label + suffix, text_color=text_color)
+        self.time_label.configure(text_color=text_color)
+        self.progress.configure(progress_color=fill_color)
 
         self.start_button.configure(text="Pause" if self.session.is_running else self._henshin_word())
 
