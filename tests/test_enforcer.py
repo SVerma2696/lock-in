@@ -316,6 +316,52 @@ def test_message_copy_matches_serious_tokusatsu_tone():
     assert body == "Screen sealed for 15s. Recover, then resume the mission."
 
 
+def test_default_era_is_heisei():
+    """No era given should read exactly like explicitly asking for Heisei."""
+    default = message_for(Action.WARN, app="discord.exe", remaining="12:30", seconds=20, lockdown=15)
+    heisei = message_for(Action.WARN, era="Heisei", app="discord.exe", remaining="12:30",
+                         seconds=20, lockdown=15)
+    assert default == heisei
+
+
+@pytest.mark.parametrize("era", ["Showa", "Heisei", "Reiwa"])
+@pytest.mark.parametrize("action", [Action.WARN, Action.NAG, Action.MINIMIZE, Action.LOCKDOWN])
+def test_every_era_has_message_copy_for_every_rung(era, action):
+    title, body = message_for(action, era=era, app="discord.exe", remaining="12:30",
+                              seconds=20, lockdown=15)
+    assert title and body
+    assert "{" not in body
+
+
+def test_showa_and_reiwa_have_a_different_voice_than_heisei():
+    """The whole point of era copy is that it doesn't all read the same."""
+    heisei_title, _ = message_for(Action.WARN, era="Heisei", app="discord.exe", remaining="12:30",
+                                  seconds=20, lockdown=15)
+    showa_title, _ = message_for(Action.WARN, era="Showa", app="discord.exe", remaining="12:30",
+                                 seconds=20, lockdown=15)
+    reiwa_title, _ = message_for(Action.WARN, era="Reiwa", app="discord.exe", remaining="12:30",
+                                 seconds=20, lockdown=15)
+    assert len({heisei_title, showa_title, reiwa_title}) == 3
+
+
+def test_unknown_era_falls_back_to_heisei_instead_of_crashing():
+    title, _ = message_for(Action.WARN, era="Not A Real Era", app="discord.exe",
+                           remaining="12:30", seconds=20, lockdown=15)
+    assert title == "Off Mission"
+
+
+@pytest.mark.parametrize("era", ["Showa", "Heisei", "Reiwa"])
+def test_every_era_has_a_lockdown_screen_label(era):
+    from lock_in.enforcer import lockdown_label_for
+    label = lockdown_label_for(era)
+    assert label and label == label.upper()   # the lockdown screen shouts, on purpose
+
+
+def test_lockdown_label_falls_back_for_unknown_era():
+    from lock_in.enforcer import lockdown_label_for
+    assert lockdown_label_for("Not A Real Era") == lockdown_label_for("Heisei")
+
+
 def test_window_display_truncates_long_titles():
     w = win("chrome.exe", "x" * 200)
     assert len(w.display) < 90

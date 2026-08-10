@@ -40,6 +40,24 @@ def lighten(hex_color: str, factor: float = 0.35) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def darken(hex_color: str, factor: float = 0.35) -> str:
+    """
+    Mix a color with black to make a much dimmer version of it.
+
+    `factor` says how much black to mix in: 0 means "no change at all",
+    1 means "turn it all the way to black". This is `lighten()`'s
+    opposite twin -- used for backgrounds instead of text, since a
+    background needs to go the other way (darker, not paler) to stay
+    readable behind light-colored text in dark mode.
+    """
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    r = round(r * (1 - factor))
+    g = round(g * (1 - factor))
+    b = round(b * (1 - factor))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 @dataclass(frozen=True)
 class RiderTheme:
     """One Rider's two colors, plus which era and year they're from."""
@@ -57,6 +75,22 @@ class RiderTheme:
     @property
     def secondary_pair(self) -> tuple[str, str]:
         return (self.secondary, lighten(self.secondary))
+
+    @property
+    def surface_pair(self) -> tuple[str, str]:
+        """
+        A panel-background color tinted by this Rider's primary color —
+        pale for light mode, dark for dark mode. Both come from the
+        exact same starting color, just pushed toward opposite ends, so
+        a Rider's theme reads as "the same theme" whichever mode you're
+        in, not two unrelated colors.
+
+        0.72 (not closer to 1.0) is chosen on purpose: push it much
+        darker than that and almost every color collapses toward the
+        same near-black, and dark mode stops looking like it has a
+        theme applied at all.
+        """
+        return (lighten(self.primary, 0.90), darken(self.primary, 0.72))
 
 
 RIDER_THEMES: dict[str, RiderTheme] = {

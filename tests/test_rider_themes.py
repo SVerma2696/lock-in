@@ -1,4 +1,4 @@
-from lock_in.rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES, lighten
+from lock_in.rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES, darken, lighten
 
 
 def test_has_all_38_riders():
@@ -38,3 +38,30 @@ def test_theme_color_pairs_are_light_dark_tuples():
     light, dark = theme.primary_pair
     assert light == theme.primary
     assert dark != theme.primary  # the dark-mode variant must actually differ
+
+
+def test_darken_moves_toward_black():
+    assert darken("#ffffff", 0.5) == "#808080"
+    assert darken("#ffffff", 0.0) == "#ffffff"
+    assert darken("#ffffff", 1.0) == "#000000"
+
+
+def test_surface_pair_is_pale_for_light_and_near_black_for_dark():
+    theme = RIDER_THEMES["Kamen Rider (1971)"]  # primary is a green
+    light_surface, dark_surface = theme.surface_pair
+
+    def brightness(hex_color: str) -> int:
+        hex_color = hex_color.lstrip("#")
+        return sum(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+    # Light mode surface should read as "pale" (bright), dark mode as
+    # "near-black" (dim) -- same underlying hue, very different brightness.
+    assert brightness(light_surface) > 600   # close to white (max 765)
+    assert brightness(dark_surface) < 100    # close to black
+
+
+def test_surface_pair_keeps_the_riders_hue_recognisable():
+    """Two different Riders' surfaces shouldn't collapse to the same grey."""
+    green_rider = RIDER_THEMES["Kamen Rider (1971)"]
+    red_rider = RIDER_THEMES["Kamen Rider Kuuga (2000)"]
+    assert green_rider.surface_pair != red_rider.surface_pair

@@ -314,30 +314,96 @@ class Enforcer:
 # --------------------------------------------------------------------------- #
 # The words shown at each step. Kept here in one place so the tone is
 # consistent, and the screen code doesn't need to know what to say.
+#
+# There's one full set of words per Kamen Rider era (Showa, Heisei,
+# Reiwa), so picking a different era of Rider in Settings doesn't just
+# repaint the app — it also talks to you a little differently:
+#   Showa  — an old base alarm: blunt, short, siren-like.
+#   Heisei — a tactical mission briefing. This is also the fallback set,
+#            used if we ever get handed an era name we don't recognise.
+#   Reiwa  — a modern digital system alert: crisp, a bit clinical.
 # --------------------------------------------------------------------------- #
-MESSAGES = {
-    Action.WARN: (
-        "Off Mission",
-        "{app} is not part of the mission. {time} remains in this Henshin block.",
-    ),
-    Action.NAG: (
-        "Repeated Violation",
-        "{seconds}s on {app}. {time} until the mission ends — hold the line.",
-    ),
-    Action.MINIMIZE: (
-        "Window Neutralized",
-        "{app} minimized. {time} remaining. This was your directive.",
-    ),
-    Action.LOCKDOWN: (
-        "Full Lockdown",
-        "Screen sealed for {lockdown}s. Recover, then resume the mission.",
-    ),
+DEFAULT_ERA = "Heisei"
+
+MESSAGES_BY_ERA = {
+    "Showa": {
+        Action.WARN: (
+            "Intruder Alert",
+            "{app} detected. {time} remains in this Henshin block.",
+        ),
+        Action.NAG: (
+            "Second Alarm",
+            "{seconds}s on {app}. {time} until mission's end — hold the line.",
+        ),
+        Action.MINIMIZE: (
+            "Target Neutralized",
+            "{app} minimized. {time} remaining.",
+        ),
+        Action.LOCKDOWN: (
+            "Base Lockdown",
+            "Sealed for {lockdown}s. Regroup, then resume the mission.",
+        ),
+    },
+    "Heisei": {
+        Action.WARN: (
+            "Off Mission",
+            "{app} is not part of the mission. {time} remains in this Henshin block.",
+        ),
+        Action.NAG: (
+            "Repeated Violation",
+            "{seconds}s on {app}. {time} until the mission ends — hold the line.",
+        ),
+        Action.MINIMIZE: (
+            "Window Neutralized",
+            "{app} minimized. {time} remaining. This was your directive.",
+        ),
+        Action.LOCKDOWN: (
+            "Full Lockdown",
+            "Screen sealed for {lockdown}s. Recover, then resume the mission.",
+        ),
+    },
+    "Reiwa": {
+        Action.WARN: (
+            "Focus Breach",
+            "{app} flagged. {time} left in this Henshin block.",
+        ),
+        Action.NAG: (
+            "Repeated Breach",
+            "{seconds}s on {app} — {time} to mission end. System recommends refocusing.",
+        ),
+        Action.MINIMIZE: (
+            "Process Terminated",
+            "{app} minimized. {time} remaining. Directive executed.",
+        ),
+        Action.LOCKDOWN: (
+            "System Lockdown",
+            "Screen locked {lockdown}s. Recalibrate, then resume.",
+        ),
+    },
+}
+
+# The big shouted words on the full-screen lockdown cover, one per era.
+LOCKDOWN_LABELS = {
+    "Showa": "BASE LOCKDOWN.",
+    "Heisei": "LOCKDOWN ENGAGED.",
+    "Reiwa": "SYSTEM LOCKDOWN.",
 }
 
 
 def message_for(action: Action, *, app: str, remaining: str,
-                seconds: int, lockdown: int) -> tuple[str, str]:
-    """Fill in the blanks for `action`'s message. Returns (title, body)."""
-    title, body = MESSAGES[action]
+                seconds: int, lockdown: int, era: str = DEFAULT_ERA) -> tuple[str, str]:
+    """
+    Fill in the blanks for `action`'s message, in the voice of `era`.
+
+    If `era` isn't one we know, we quietly use the Heisei words instead
+    of crashing — a typo in a saved settings file shouldn't break the app.
+    """
+    messages = MESSAGES_BY_ERA.get(era, MESSAGES_BY_ERA[DEFAULT_ERA])
+    title, body = messages[action]
     return title, body.format(app=app, time=remaining, seconds=int(seconds),
                               lockdown=lockdown)
+
+
+def lockdown_label_for(era: str) -> str:
+    """The big shouted words on the full-screen lockdown cover, for this era."""
+    return LOCKDOWN_LABELS.get(era, LOCKDOWN_LABELS[DEFAULT_ERA])

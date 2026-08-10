@@ -18,6 +18,12 @@ build/
 dist/
 *.spec
 
+# The .ico/.icns app icon files are generated from lock_in/assets/app_icon.png
+# right before a build (see build.bat and release.yml) — no need to commit
+# the generated copies, just the one source picture.
+lock_in_icon.ico
+lock_in_icon.icns
+
 # Editor / OS clutter
 .vscode/
 .idea/
@@ -33,3 +39,5 @@ config.json
 model.json
 observations.jsonl
 lockin_training_data.csv
+app_icon.ico
+app_icon_square.png

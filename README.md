@@ -160,10 +160,34 @@ If you *do* want pixels later, the seam is clean: swap in anything that returns
 
 Settings → "Kamen Rider theme" picks from all 38 Rider series (Showa,
 Heisei, and Reiwa era), each with its own accent-color pair pulled from
-that Rider's actual suit colors. This only changes colors — the Henshin
-button, the timer digits/progress bar during a focus block, and a small
-"DRIVER: <name>" label — not any copy or behavior. Defaults to the
-original 1971 series. See `lock_in/rider_themes.py` for the full palette.
+that Rider's actual suit colors. This isn't just a couple of small
+accents — the header panel, the tab bar, and every tab's content panel
+are tinted toward the Rider's primary color too (near-black in dark mode,
+pale in light mode — same underlying hue either way, so it reads as "the
+same theme" in both), along with the Henshin button, the selected-tab
+highlight, the timer digits/progress bar during a focus block, and the
+"DRIVER: <name>" label. The fixed per-section colors (pink for Claude
+fallback, teal for sound/notification settings, and so on) stay as they
+are, since those work like a legend to tell sections apart regardless of
+theme. Defaults to the original 1971 series. See `lock_in/rider_themes.py`
+for the full palette.
+
+Picking a Rider also picks its **era**, and the era changes more than
+color — three further things read as genuinely different depending on
+whether you're on a Showa, Heisei, or Reiwa Rider:
+
+| | Showa (1971–1994) | Heisei (2000–2019) | Reiwa (2019–present) |
+|---|---|---|---|
+| **Voice** | Blunt base-alarm ("Intruder Alert", "Base Lockdown") | Tactical mission briefing ("Off Mission", "Full Lockdown") | Crisp digital system alert ("Focus Breach", "System Lockdown") |
+| **Background pattern** | Faint scanlines + film grain | Diamond-facet grid, like a cut gem | Circuit-board grid of lines and node dots |
+| **Divider strip** | Tick marks, like a gauge | A row of tiny diamonds | A dashed line with square nodes |
+| **Sound cue** | A plain two-tone alarm | The original beep sequence this app shipped with | A quicker, higher-pitched digital-sounding sequence |
+
+Heisei is the fallback voice/pattern/sound if the app is ever handed a
+Rider name it doesn't recognize, so nothing crashes on a corrupted
+`config.json`. All three eras of copy live in `lock_in/enforcer.py`
+(`MESSAGES_BY_ERA`), the patterns in `lock_in/visuals.py`, and the sound
+tables in `lock_in/notifier.py`.
 
 ### Look and feel
 
@@ -176,12 +200,30 @@ to whichever Rider is picked:
   quietly to the system default if that font isn't installed.
 - **A soft glow** behind the timer digits (the Rider's primary color) and
   behind the Henshin button (its secondary color).
-- **A faint diagonal-stripe wallpaper** behind the whole window, tinted
-  with both of the Rider's colors, with separate light- and dark-mode
-  versions so it never fights with the appearance-mode setting.
+- **A faint background wallpaper** behind the whole window, tinted with
+  both of the Rider's colors and shaped by its era (see the table above),
+  with separate light- and dark-mode versions so it never fights with the
+  appearance-mode setting.
+- **Tinted panel backgrounds** (`RiderTheme.surface_pair` in
+  `lock_in/rider_themes.py`) for the header and every tab — a pale and a
+  near-black shade of the same primary color, so the panels themselves
+  change with the theme instead of staying a fixed neutral grey.
+- **A themed divider strip** in the gap between the timer panel and the
+  tab panel. The background wallpaper's patterns are too large to show
+  up in a strip that thin, so this is its own small-scale motif per era:
+  tick marks for Showa, tiny diamonds for Heisei, a dashed circuit trace
+  for Reiwa (`make_panel_divider()` in `lock_in/visuals.py`).
 
-None of this touches copy or behavior — turn the window into any Rider's
-colors and the words stay exactly the same.
+### App icon
+
+`lock_in/assets/app_icon.png` is the app's own picture — used for the
+title-bar/taskbar icon and shown on desktop notifications. It isn't
+square, so `visuals.load_app_icon()` pads it onto a see-through square
+canvas rather than stretching it. On Windows, the taskbar specifically
+needs a real `.ico` file (not a `.png`) and its own "app ID" separate
+from `python.exe`'s — both are handled automatically
+(`main.py`'s `_detach_from_python_exe_on_windows()`, and
+`ui.py`'s `_set_app_icon()`).
 
 ---
 
@@ -386,8 +428,11 @@ Lock In/
 │   ├── observations.py         Records every window seen during focus and tracks
 │   │                           which have been labelled. Backs train.py.
 │   ├── rider_themes.py         Kamen Rider color palettes for the theme toggle.
-│   ├── visuals.py               Display font pick, plus Pillow-generated glow
-│   │                           and background art, tinted by the Rider theme.
+│   ├── visuals.py               Display font pick, plus Pillow-generated glow,
+│   │                           background art, and app-icon loading.
+│   ├── assets/
+│   │   └── app_icon.png         The app's own picture — window/taskbar icon
+│   │                           and notification icon.
 │   │
 │   │   ── platform-facing shells, thin by design ──
 │   ├── monitor.py              Foreground-window polling on a daemon thread.
@@ -402,14 +447,17 @@ Lock In/
 │   │                           and the serious-tokusatsu phase labels.
 │   ├── test_classifier.py      Tokenizer, prediction, online learning, persistence.
 │   ├── test_enforcer.py        Rule precedence, full escalation ladder, decay,
-│   │                           notification copy, cross-platform process matching.
+│   │                           per-era notification copy, cross-platform process matching.
 │   ├── test_observations.py    De-duplication, labelling, JSONL round-trip.
 │   ├── test_claude_fallback.py Caching, async lookup, failure handling — no
 │   │                           real network calls, a fake client stands in.
 │   ├── test_rider_themes.py    Palette completeness, color validity, dark-mode
 │   │                           shade generation.
-│   ├── test_visuals.py         Font lookup, glow shape/fade, background contrast
-│   │                           between light and dark mode.
+│   ├── test_visuals.py         Font lookup, glow shape/fade, per-era background
+│   │                           and divider differences, light/dark contrast,
+│   │                           app-icon loading/padding.
+│   ├── test_notifier.py        Era-to-sound-cue selection logic (Windows tones,
+│   │                           macOS/Linux sound tables).
 │   └── smoke_ui.py             Headless end-to-end run under Xvfb (not pytest).
 │
 ├── .github/workflows/

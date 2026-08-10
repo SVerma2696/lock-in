@@ -30,22 +30,30 @@ What the window looks like
 from __future__ import annotations
 
 import queue
+import sys
 import time
 from datetime import datetime
 from typing import List, Optional
 
 import customtkinter as ctk
+from PIL import ImageTk
 
 from .classifier import DISTRACTION, STUDY, NaiveBayesClassifier
 from .claude_fallback import ClaudeFallback
-from .config import Config, MODEL_PATH, OBSERVATIONS_PATH
+from .config import Config, MODEL_PATH, OBSERVATIONS_PATH, app_data_dir
 from .observations import ObservationStore
-from .enforcer import Action, Enforcer, Reason, WindowInfo, judge, message_for
+from .enforcer import Action, Enforcer, Reason, WindowInfo, judge, lockdown_label_for, message_for
 from .monitor import BACKEND_AVAILABLE, ActiveWindowMonitor, minimize_window
 from .notifier import Notifier
 from .session import Event, Phase, PomodoroSession
 from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES
-from .visuals import display_font_family, make_background_texture, make_glow
+from .visuals import (
+    display_font_family,
+    load_app_icon,
+    make_background_texture,
+    make_glow,
+    make_panel_divider,
+)
 
 # Our color choices, kept in one spot — so changing the theme means
 # changing a few lines here, not hunting through the whole file.
@@ -77,6 +85,11 @@ DISPLAY_FONT = display_font_family()
 # growing it a lot past this would.
 BG_TEXTURE_WIDTH = 900
 BG_TEXTURE_HEIGHT = 1200
+
+# The thin strip between the timer panel and the tab panel. Made wider
+# than the window starts at, same reasoning as the background above.
+DIVIDER_WIDTH = 900
+DIVIDER_HEIGHT = 14
 
 
 class LockInApp(ctk.CTk):
@@ -122,6 +135,7 @@ class LockInApp(ctk.CTk):
         self.geometry("560x720")
         self.minsize(500, 640)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._set_app_icon()
 
         # This picture sits behind absolutely everything else. It has to
         # be made FIRST, before any other button or label — in this
@@ -134,6 +148,7 @@ class LockInApp(ctk.CTk):
         self.bind("<Configure>", self._on_window_resized)
 
         self._build_header()
+        self._build_divider()
         self._build_tabs()
 
         self.monitor.start()
@@ -143,6 +158,43 @@ class LockInApp(ctk.CTk):
         # and visible first — a banner on a window that isn't on screen yet
         # would just be missed.
         self.after(400, self._warn_if_app_detection_unavailable)
+
+    def _set_app_icon(self) -> None:
+        """
+        Puts the app's own picture in the title bar and the taskbar.
+
+        If the picture is missing or broken, `load_app_icon()` just
+        gives back `None` instead of raising an error — so we quietly
+        skip this and the window keeps the toolkit's plain default
+        icon instead of crashing.
+        """
+        icon = load_app_icon()
+        if icon is None:
+            return
+        # Tkinter only understands its own kind of picture object, so we
+        # convert to that here. We also keep a copy on `self` — if we
+        # didn't, the toolkit could throw the picture away too early and
+        # the icon would quietly vanish a moment after it appeared.
+        self._icon_image = ImageTk.PhotoImage(icon)
+        self.iconphoto(True, self._icon_image)
+
+        # Windows' own title bar and taskbar don't reliably pick up the
+        # picture from the line above -- on Windows specifically, they
+        # need a real ".ico" file handed to them a different way. We
+        # save one, once, in the app's own settings folder (the same
+        # place config.json lives), so we're not trying to write into
+        # the program's own install folder, which might not be allowed.
+        if sys.platform == "win32":
+            try:
+                ico_path = app_data_dir() / "app_icon.ico"
+                if not ico_path.exists():
+                    icon.save(
+                        ico_path, format="ICO",
+                        sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+                    )
+                self.iconbitmap(default=str(ico_path))
+            except Exception:
+                pass
 
     def _apply_rider_theme(self) -> None:
         """
@@ -163,20 +215,35 @@ class LockInApp(ctk.CTk):
         )
         self.color_focus = theme.primary_pair
         self.color_rider_accent = theme.secondary_pair
+        # A panel-background color tinted by the Rider's primary color —
+        # pale in light mode, near-black in dark mode, same hue either
+        # way. This is what makes the header and tabs themselves change
+        # color, not just a button and a label.
+        self.color_surface = theme.surface_pair
+        # Which era this Rider is from (Showa/Heisei/Reiwa) — this also
+        # picks the notification wording, the lockdown screen's big
+        # words, the background pattern shape, and the sound cues.
+        self.current_era = theme.era
 
         timer_glow = make_glow(300, 120, theme.primary)
         button_glow = make_glow(170, 70, theme.secondary)
         bg_dark = make_background_texture(
-            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, theme.primary, theme.secondary, dark=True
+            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, theme.primary, theme.secondary,
+            dark=True, era=theme.era,
         )
         bg_light = make_background_texture(
-            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, theme.primary, theme.secondary, dark=False
+            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, theme.primary, theme.secondary,
+            dark=False, era=theme.era,
+        )
+        divider = make_panel_divider(
+            DIVIDER_WIDTH, DIVIDER_HEIGHT, theme.primary, theme.secondary, era=theme.era,
         )
 
         if hasattr(self, "_timer_glow_image"):
             self._timer_glow_image.configure(light_image=timer_glow, dark_image=timer_glow)
             self._button_glow_image.configure(light_image=button_glow, dark_image=button_glow)
             self._bg_image.configure(light_image=bg_light, dark_image=bg_dark)
+            self._divider_image.configure(light_image=divider, dark_image=divider)
         else:
             self._timer_glow_image = ctk.CTkImage(
                 light_image=timer_glow, dark_image=timer_glow, size=(300, 120)
@@ -187,6 +254,10 @@ class LockInApp(ctk.CTk):
             self._bg_image = ctk.CTkImage(
                 light_image=bg_light, dark_image=bg_dark,
                 size=(BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT),
+            )
+            self._divider_image = ctk.CTkImage(
+                light_image=divider, dark_image=divider,
+                size=(DIVIDER_WIDTH, DIVIDER_HEIGHT),
             )
 
     def _on_window_resized(self, event) -> None:
@@ -204,6 +275,14 @@ class LockInApp(ctk.CTk):
         new_size = (max(event.width, 1), max(event.height, 1))
         if self._bg_image.cget("size") != new_size:
             self._bg_image.configure(size=new_size)
+
+        # The divider strip spans the same width as the header/tabs
+        # panels above and below it (the window's width, minus the
+        # padx=20 gap on each side) — keep it in sync as the window
+        # changes size, same idea as the background picture above.
+        divider_width = max(event.width - 40, 1)
+        if self._divider_image.cget("size") != (divider_width, DIVIDER_HEIGHT):
+            self._divider_image.configure(size=(divider_width, DIVIDER_HEIGHT))
 
     def _warn_if_app_detection_unavailable(self) -> None:
         """
@@ -230,8 +309,11 @@ class LockInApp(ctk.CTk):
     # ================================================================== #
     def _build_header(self) -> None:
         """Builds the top area: banner, phase name, countdown, progress bar, and buttons."""
-        header = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        header.pack(fill="x", padx=20, pady=(16, 8))
+        header = ctk.CTkFrame(self, corner_radius=16, fg_color=self.color_surface)
+        header.pack(fill="x", padx=20, pady=(16, 4))
+        # Kept so `_on_rider_theme_change` can re-tint this panel later
+        # without having to rebuild the whole header from scratch.
+        self.header_frame = header
 
         # A short pop-up message banner. Starts hidden; _show_banner reveals it.
         self.banner = ctk.CTkLabel(
@@ -309,9 +391,23 @@ class LockInApp(ctk.CTk):
         )
         self.watch_label.pack(pady=(12, 0))
 
+    def _build_divider(self) -> None:
+        """
+        Builds the thin, decorated strip that sits in the gap between
+        the timer panel above and the tab panel below — so even that
+        little gap looks like it belongs to whichever Kamen Rider era
+        is picked, instead of just being empty space.
+        """
+        self._divider_label = ctk.CTkLabel(self, text="", image=self._divider_image)
+        self._divider_label.pack(fill="x", padx=20, pady=(0, 4))
+
     def _build_tabs(self) -> None:
-        self.tabs = ctk.CTkTabview(self, height=340)
-        self.tabs.pack(fill="both", expand=True, padx=20, pady=(4, 16))
+        self.tabs = ctk.CTkTabview(
+            self, height=340,
+            fg_color=self.color_surface,
+            segmented_button_selected_color=self.color_rider_accent,
+        )
+        self.tabs.pack(fill="both", expand=True, padx=20, pady=(0, 16))
 
         for name in ("Blocking", "Activity", "Settings"):
             self.tabs.add(name)
@@ -625,6 +721,7 @@ class LockInApp(ctk.CTk):
         """Turn a step on the ladder into something you actually see or hear."""
         title, body = message_for(
             action,
+            era=self.current_era,
             app=window.display,
             remaining=self.session.format_remaining(),
             seconds=self.enforcer.seconds_on_blocked_app,
@@ -686,7 +783,7 @@ class LockInApp(ctk.CTk):
         overlay.protocol("WM_DELETE_WINDOW", lambda: None)   # the X button on this window does nothing
         self._lockdown_window = overlay
 
-        ctk.CTkLabel(overlay, text="LOCKDOWN ENGAGED.",
+        ctk.CTkLabel(overlay, text=lockdown_label_for(self.current_era),
                      font=ctk.CTkFont(size=54, weight="bold"),
                      text_color=self.color_focus).pack(pady=(220, 10))
 
@@ -818,7 +915,13 @@ class LockInApp(ctk.CTk):
             text=f"DRIVER: {value.upper()}", text_color=self.color_rider_accent
         )
         self.start_button.configure(fg_color=self.color_rider_accent)
+        self.header_frame.configure(fg_color=self.color_surface)
         self._refresh_timer_widgets()
+        # Rebuilding the tabs is how the tab panels themselves (and the
+        # selected-tab highlight) pick up the new surface color and
+        # accent — same trick already used when you switch appearance
+        # mode, just triggered by a Rider change instead.
+        self._rebuild_tabs()
 
     def _rebuild_tabs(self) -> None:
         """Throws away and redraws the tabs, keeping whichever one was open."""
@@ -833,6 +936,12 @@ class LockInApp(ctk.CTk):
             self.tabs.set(current)
         except Exception:
             pass
+        # Force every freshly-built widget to actually paint right now,
+        # instead of waiting for its own natural turn. Skipping this can
+        # leave brand-new widgets showing a stale or blank background for
+        # a moment — especially when this whole rebuild was triggered
+        # from inside another widget's own click, like the theme dropdown.
+        self.update_idletasks()
 
     # ================================================================== #
     # Saving your settings

@@ -10,7 +10,9 @@ It tries three ways to get your attention, in order of how gentle they are:
      `osascript` on macOS, `notify-send` on Linux if it's installed) —
      shows up quietly without stealing your focus.
   2. A sound (winsound on Windows, `afplay` on macOS, `paplay`/`aplay` on
-     Linux) — simple, and hard to miss.
+     Linux) — simple, and hard to miss. Which exact sound plays depends
+     on which Kamen Rider era is picked in Settings (Showa/Heisei/Reiwa)
+     — see the tone/sound tables below.
   3. A little banner inside the app itself — always works, no matter what.
 
 Why we don't just spam you
@@ -31,6 +33,10 @@ import sys
 import threading
 from pathlib import Path
 from typing import Optional
+
+from .config import app_data_dir
+from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES
+from .visuals import load_app_icon
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -61,12 +67,67 @@ _HAS_NOTIFY_SEND = IS_LINUX and shutil.which("notify-send") is not None
 _HAS_PAPLAY = IS_LINUX and shutil.which("paplay") is not None
 _HAS_APLAY = IS_LINUX and shutil.which("aplay") is not None
 
-# A couple of common sound files that ship on most Linux desktops. We use
-# whichever one of these actually exists on this computer.
-_LINUX_SOUND_CANDIDATES = [
-    "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga",
-    "/usr/share/sounds/freedesktop/stereo/bell.oga",
-]
+# --- Sound cues, one flavor per Kamen Rider era --------------------------- #
+# Picking a different era of Rider doesn't just repaint the app — the
+# beeps and chimes sound a little different too:
+#   Showa  — a plain, blunt two-tone alarm, like an old base siren.
+#   Heisei — the original sound this app shipped with. Also the
+#            fallback used if we're ever handed an era name we don't
+#            recognise.
+#   Reiwa  — a quicker, higher-pitched sequence, more "digital".
+DEFAULT_ERA = "Heisei"
+
+_WINDOWS_CHIME_TONES = {
+    "Showa": [(440, 200), (440, 200)],
+    "Heisei": [(880, 140), (1175, 220)],
+    "Reiwa": [(1200, 80), (1500, 80), (1800, 120)],
+}
+_WINDOWS_ALERT_TONES = {
+    "Showa": [(440, 180), (330, 180), (440, 220)],
+    "Heisei": [(1000, 110), (760, 110), (1000, 160)],
+    "Reiwa": [(1800, 70), (1400, 70), (1800, 70), (2200, 120)],
+}
+
+# These are all sound files that already come with macOS, so no extra
+# download is needed — just a different built-in sound per era.
+_MAC_CHIME_SOUND = {"Showa": "Basso", "Heisei": "Ping", "Reiwa": "Glass"}
+_MAC_ALERT_SOUND = {"Showa": "Funk", "Heisei": "Sosumi", "Reiwa": "Hero"}
+
+# A couple of common sound files that ship on most Linux desktops, most
+# fitting first. We use whichever one of these actually exists on this
+# computer — Linux desktops don't all install the same sound files.
+_LINUX_CHIME_CANDIDATES = {
+    "Showa": ["bell.oga", "dialog-warning.oga"],
+    "Heisei": ["dialog-warning.oga", "bell.oga"],
+    "Reiwa": ["message.oga", "complete.oga", "bell.oga"],
+}
+_LINUX_ALERT_CANDIDATES = {
+    "Showa": ["dialog-warning.oga", "bell.oga"],
+    "Heisei": ["dialog-warning.oga", "bell.oga"],
+    "Reiwa": ["complete.oga", "message.oga", "bell.oga"],
+}
+_LINUX_SOUND_DIR = "/usr/share/sounds/freedesktop/stereo"
+
+
+def _square_icon_path() -> Optional[str]:
+    """
+    Give back a file path to the app's own picture, saved as a square.
+
+    Pop-up notifications need an actual file on disk, not a picture
+    already sitting in memory — so the first time this is asked for, we
+    save one to the app's own settings folder (the same place
+    config.json lives) and just reuse that file every time after.
+    """
+    path = app_data_dir() / "app_icon_square.png"
+    if not path.exists():
+        icon = load_app_icon()
+        if icon is None:
+            return None
+        try:
+            icon.save(path)
+        except Exception:
+            return None
+    return str(path)
 
 
 class Notifier:
@@ -109,23 +170,40 @@ class Notifier:
         """A soft, friendly chime when a new phase (focus or break) starts."""
         if not self.config.sound_enabled:
             return
+        era = self._era()
         if IS_WINDOWS and _winsound is not None:
-            self._beep_sequence([(880, 140), (1175, 220)])
+            self._beep_sequence(_WINDOWS_CHIME_TONES.get(era, _WINDOWS_CHIME_TONES[DEFAULT_ERA]))
         elif IS_MACOS:
-            self._play_mac_sound("/System/Library/Sounds/Ping.aiff")
+            name = _MAC_CHIME_SOUND.get(era, _MAC_CHIME_SOUND[DEFAULT_ERA])
+            self._play_mac_sound(f"/System/Library/Sounds/{name}.aiff")
         elif _HAS_PAPLAY or _HAS_APLAY:
-            self._play_linux_sound()
+            candidates = _LINUX_CHIME_CANDIDATES.get(era, _LINUX_CHIME_CANDIDATES[DEFAULT_ERA])
+            self._play_linux_sound(candidates)
 
     def alert_sound(self) -> None:
         """A sharper sound for when you need a nudge back to work."""
         if not self.config.sound_enabled:
             return
+        era = self._era()
         if IS_WINDOWS and _winsound is not None:
-            self._beep_sequence([(1000, 110), (760, 110), (1000, 160)])
+            self._beep_sequence(_WINDOWS_ALERT_TONES.get(era, _WINDOWS_ALERT_TONES[DEFAULT_ERA]))
         elif IS_MACOS:
-            self._play_mac_sound("/System/Library/Sounds/Sosumi.aiff", repeat=2)
+            name = _MAC_ALERT_SOUND.get(era, _MAC_ALERT_SOUND[DEFAULT_ERA])
+            self._play_mac_sound(f"/System/Library/Sounds/{name}.aiff", repeat=2)
         elif _HAS_PAPLAY or _HAS_APLAY:
-            self._play_linux_sound(repeat=2)
+            candidates = _LINUX_ALERT_CANDIDATES.get(era, _LINUX_ALERT_CANDIDATES[DEFAULT_ERA])
+            self._play_linux_sound(candidates, repeat=2)
+
+    def _era(self) -> str:
+        """
+        Which Kamen Rider era (Showa/Heisei/Reiwa) the currently-picked
+        Rider is from — this is what actually picks the sound cues.
+
+        If the saved Rider name isn't one we recognise, we quietly fall
+        back to the very first Rider instead of crashing.
+        """
+        theme = RIDER_THEMES.get(self.config.rider_theme, RIDER_THEMES[DEFAULT_RIDER_THEME])
+        return theme.era
 
     # ------------------------------------------------------------------ #
     # The behind-the-scenes bits
@@ -141,6 +219,7 @@ class Notifier:
                     title=title,
                     msg=body,
                     duration="short" if urgency == "normal" else "long",
+                    icon=_square_icon_path() or "",
                 )
                 if urgency == "high":
                     toast.set_audio(_winotify_audio.LoopingAlarm2, loop=False)
@@ -165,7 +244,12 @@ class Notifier:
 
         if _HAS_NOTIFY_SEND:
             try:
-                subprocess.run(["notify-send", title, body], timeout=2, capture_output=True)
+                args = ["notify-send"]
+                icon_path = _square_icon_path()
+                if icon_path:
+                    args += ["--icon", icon_path]
+                args += [title, body]
+                subprocess.run(args, timeout=2, capture_output=True)
             except Exception:
                 pass
 
@@ -197,9 +281,13 @@ class Notifier:
 
         threading.Thread(target=run, daemon=True).start()
 
-    def _play_linux_sound(self, repeat: int = 1) -> None:
+    def _play_linux_sound(self, candidates: list, repeat: int = 1) -> None:
         """Play whichever Linux system sound we can actually find on this computer."""
-        sound = next((p for p in _LINUX_SOUND_CANDIDATES if Path(p).exists()), None)
+        sound = next(
+            (f"{_LINUX_SOUND_DIR}/{name}" for name in candidates
+             if Path(f"{_LINUX_SOUND_DIR}/{name}").exists()),
+            None,
+        )
         if sound is None:
             return
         player = "paplay" if _HAS_PAPLAY else "aplay"

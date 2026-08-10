@@ -31,13 +31,25 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Make a Windows icon file (.ico) from the app's picture
+        if: runner.os == 'Windows'
+        run: python -c "from lock_in.visuals import load_app_icon; load_app_icon().save('lock_in_icon.ico', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+
+      - name: Make a macOS icon file (.icns) from the app's picture
+        if: runner.os == 'macOS'
+        run: python -c "from lock_in.visuals import load_app_icon; load_app_icon().save('lock_in_icon.icns')"
+
       - name: Build (Windows)
         if: runner.os == 'Windows'
-        run: pyinstaller --noconfirm --onefile --windowed --name "Lock In" --hidden-import win32gui --hidden-import win32process --hidden-import win32con --hidden-import psutil --collect-all customtkinter main.py
+        run: pyinstaller --noconfirm --onefile --windowed --name "Lock In" --icon lock_in_icon.ico --add-data "lock_in/assets;lock_in/assets" --hidden-import win32gui --hidden-import win32process --hidden-import win32con --hidden-import psutil --collect-all customtkinter main.py
 
-      - name: Build (macOS/Linux)
-        if: runner.os != 'Windows'
-        run: pyinstaller --noconfirm --onefile --windowed --name "Lock In" --collect-all customtkinter main.py
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: pyinstaller --noconfirm --onefile --windowed --name "Lock In" --icon lock_in_icon.icns --add-data "lock_in/assets:lock_in/assets" --collect-all customtkinter main.py
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: pyinstaller --noconfirm --onefile --windowed --name "Lock In" --add-data "lock_in/assets:lock_in/assets" --collect-all customtkinter main.py
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
