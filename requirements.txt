@@ -9,7 +9,7 @@ Pillow>=10.0.0
 # These help the app see which window you're looking at, on Windows.
 # Without them, the app still works, but it can't tell what app you're in,
 # so it can't block anything.
-pywin32>=306; sys_platform == "win32"
+pywin32>=312; sys_platform == "win32"
 psutil>=5.9.0
 
 # This shows little pop-up messages on Windows. Not required — if it's
