@@ -10,7 +10,7 @@ Pillow>=10.0.0
 # Without them, the app still works, but it can't tell what app you're in,
 # so it can't block anything.
 pywin32>=306; sys_platform == "win32"
-psutil>=5.9.0
+psutil>=7.2.2
 
 # This shows little pop-up messages on Windows. Not required — if it's
 # missing, the app shows its own message banner inside the window instead.
