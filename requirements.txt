@@ -22,4 +22,4 @@ winotify>=1.1.0; sys_platform == "win32"
 anthropic>=0.40.0
 
 # Only needed if you want to run the test suite.
-pytest>=8.0.0
+pytest>=9.1.1
