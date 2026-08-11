@@ -218,14 +218,24 @@ def test_constellation_progress_lights_more_stars_at_higher_progress():
     assert _alpha_sum(high) > _alpha_sum(low)
 
 
-def test_constellation_progress_stars_are_visible_against_a_pale_background():
-    """Fourze's primary is pure white -- stars drawn in raw white would
-    vanish against this app's own near-white light-mode background."""
+def test_constellation_progress_draws_the_exact_color_it_is_given():
+    """Color safety now lives in rider_themes.py's hand-tuned per-mode
+    data (see test_fourze_light_mode_primary_is_not_pure_white below),
+    not in this renderer -- it just draws whatever hex it's handed."""
     from lock_in.visuals import render_constellation_progress
-    image = render_constellation_progress(200, 60, 0.9, "#ffffff", "#ef6c00", dark=False)
+    image = render_constellation_progress(200, 60, 1.0, "#ffffff", "#ef6c00", dark=False)
     opaque_pixels = [p for p in image.getdata() if p[3] > 200]
-    assert opaque_pixels
-    assert not any(p[:3] == (255, 255, 255) for p in opaque_pixels)
+    assert any(p[:3] == (255, 255, 255) for p in opaque_pixels)
+
+
+def test_fourze_light_mode_primary_is_not_pure_white():
+    """This is where the old vanishing-stars bug is actually prevented
+    now: Fourze's light-mode primary itself is a visible grey, not
+    white, so it never vanishes against this app's pale light-mode
+    background in the first place."""
+    from lock_in.rider_themes import RIDER_THEMES
+    fourze = RIDER_THEMES["Kamen Rider Fourze (2011)"]
+    assert fourze.primary[0] != "#ffffff"
 
 
 def test_constellation_progress_star_layout_is_stable_between_calls():

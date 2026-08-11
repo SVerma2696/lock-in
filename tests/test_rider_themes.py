@@ -22,20 +22,21 @@ def test_default_theme_is_the_original():
 
 
 def test_spot_check_corrected_palette_values():
-    # These pin the user-corrected palette so a future edit can't quietly
-    # drift back toward the original (wrong) guesses.
-    assert RIDER_THEMES["Kamen Rider (1971)"].primary == "#1b5e3a"
-    assert RIDER_THEMES["Kamen Rider (1971)"].secondary == "#c0392b"
-    assert RIDER_THEMES["Kamen Rider V3 (1973)"].primary == "#2e7d32"
-    assert RIDER_THEMES["Kamen Rider Zero-One (2019)"].primary == "#aeea00"
-    assert RIDER_THEMES["Kamen Rider Gavv (2024)"].secondary == "#fbc02d"
-    assert RIDER_THEMES["Kamen Rider MY-TH (2026)"].primary == "#1565c0"
+    # These pin the user-corrected, per-mode palette so a future edit
+    # can't quietly drift back toward the older, single-shade guesses.
+    assert RIDER_THEMES["Kamen Rider (1971)"].primary == ("#154a2e", "#237a4b")
+    assert RIDER_THEMES["Kamen Rider (1971)"].secondary == ("#a83225", "#d94436")
+    assert RIDER_THEMES["Kamen Rider V3 (1973)"].primary == ("#225c25", "#4caf50")
+    assert RIDER_THEMES["Kamen Rider Zero-One (2019)"].primary == ("#77a100", "#c6ff00")
+    assert RIDER_THEMES["Kamen Rider Gavv (2024)"].secondary == ("#c48000", "#ffee58")
+    assert RIDER_THEMES["Kamen Rider MY-TH (2026)"].primary == ("#0f4a8f", "#42a5f5")
 
 
 def test_every_entry_has_valid_hex_colors():
     for name, theme in RIDER_THEMES.items():
-        for value in (theme.primary, theme.secondary):
-            assert value.startswith("#") and len(value) == 7, f"{name}: {value!r}"
+        for pair in (theme.primary, theme.secondary):
+            for value in pair:
+                assert value.startswith("#") and len(value) == 7, f"{name}: {value!r}"
 
 
 def test_lighten_moves_toward_white():
@@ -46,9 +47,9 @@ def test_lighten_moves_toward_white():
 
 def test_theme_color_pairs_are_light_dark_tuples():
     theme = RIDER_THEMES["Kamen Rider (1971)"]
+    assert theme.primary_pair == theme.primary  # just hands back the stored pair
     light, dark = theme.primary_pair
-    assert light == theme.primary
-    assert dark != theme.primary  # the dark-mode variant must actually differ
+    assert light != dark  # the light/dark shades must actually differ
 
 
 def test_darken_moves_toward_black():
@@ -90,9 +91,10 @@ def test_readable_text_color_picks_white_on_dark_backgrounds():
 
 def test_primary_text_pair_is_never_the_same_as_its_own_light_mode_surface():
     """
-    This is the exact bug this pair exists to fix: Fourze's primary is
-    pure white, so its plain primary_pair light-mode value (white) was
-    literally identical to its own pale surface -- invisible text.
+    This is the same bug class primary_text_pair exists to prevent: a
+    Rider whose light-mode primary sits very close to white (Fourze's
+    is a pale grey) needs its TEXT pushed further away from its own
+    pale surface, or the two become impossible to tell apart.
     """
     fourze = RIDER_THEMES["Kamen Rider Fourze (2011)"]
     light_text, _ = fourze.primary_text_pair
@@ -150,16 +152,16 @@ def test_black_gets_stricter_dark_mode_text_contrast_than_normal_riders():
     white than every other Rider, for stricter contrast."""
     black = RIDER_THEMES["Kamen Rider Black (1987)"]
     ordinary = RIDER_THEMES["Kamen Rider V3 (1973)"]
-    assert black.primary_text_pair[1] == lighten(black.primary, 0.55)
-    assert ordinary.primary_text_pair[1] == lighten(ordinary.primary, 0.35)
+    assert black.primary_text_pair[1] == lighten(black.primary[1], 0.55)
+    assert ordinary.primary_text_pair[1] == lighten(ordinary.primary[1], 0.35)
 
 
 def test_black_light_mode_text_is_unaffected():
     """The user asked for stricter DARK mode contrast only -- light mode
     should use the same amount every other Rider gets."""
     black = RIDER_THEMES["Kamen Rider Black (1987)"]
-    assert black.primary_text_pair[0] == darken(black.primary, 0.35)
-    assert black.secondary_text_pair[0] == darken(black.secondary, 0.35)
+    assert black.primary_text_pair[0] == darken(black.primary[0], 0.35)
+    assert black.secondary_text_pair[0] == darken(black.secondary[0], 0.35)
 
 
 def test_button_text_pair_is_readable_against_the_secondary_fill_both_modes():

@@ -46,7 +46,7 @@ from .enforcer import Action, Enforcer, Reason, WindowInfo, judge, lockdown_labe
 from .monitor import BACKEND_AVAILABLE, ActiveWindowMonitor, minimize_window
 from .notifier import Notifier
 from .session import Event, Phase, PomodoroSession, label_for
-from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES, lighten
+from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES
 from .visuals import (
     SHAPE_EFFECTS,
     apply_tier1_background_effect,
@@ -219,10 +219,6 @@ class LockInApp(ctk.CTk):
     def _is_tokusatsu(self) -> bool:
         return self.config_obj.terminology == "tokusatsu"
 
-    def _driver_prefix(self) -> str:
-        """The little word in front of the Rider's name under the timer."""
-        return "DRIVER" if self._is_tokusatsu() else "THEME"
-
     def _henshin_word(self) -> str:
         """What the main Start/Henshin button says when it's not running."""
         return "Henshin" if self._is_tokusatsu() else "Start"
@@ -266,39 +262,48 @@ class LockInApp(ctk.CTk):
         self.color_button_text = theme.button_text_pair
         # The lockdown screen's cover is always dark, no matter which
         # appearance mode you're in, so its words just need to always be
-        # bright — one plain color, not a light/dark pair.
-        self.color_lockdown_text = lighten(theme.primary, 0.35)
+        # bright — one plain color, not a light/dark pair. The dark-mode
+        # half of primary is already hand-picked to pop against a dark
+        # background, so it's used as-is here, no extra lightening.
+        self.color_lockdown_text = theme.primary[1]
         # Which era this Rider is from (Showa/Heisei/Reiwa) — this also
         # picks the notification wording, the lockdown screen's big
         # words, the background pattern shape, and the sound cues.
         self.current_era = theme.era
 
-        # Which Tier 1 gimmick (if any) this Rider has, and the two raw
-        # colors some of those gimmicks need directly (not the
-        # light/dark pairs above -- Agito's color shift and Stronger's
-        # glow both need to start from ONE real color, not a pair).
+        # Which Tier 1 gimmick (if any) this Rider has, and the two
+        # (light, dark) color pairs some of those gimmicks need directly
+        # (not the text/surface pairs above -- Agito's color shift and
+        # Stronger's glow both work from the Rider's real colors).
         self.current_tier1_effect = theme.tier1_effect
-        self.rider_primary = theme.primary
-        self.rider_secondary = theme.secondary
+        self.rider_primary_pair = theme.primary
+        self.rider_secondary_pair = theme.secondary
         # Stronger's glow uses the Rider's own primary (already a red);
         # Kiva's night wash uses the secondary (the amber gold). Every
         # other Rider never reads this, so the value doesn't matter for them.
-        self.color_tier1_effect = (
+        self.color_tier1_effect_pair = (
             theme.primary if theme.tier1_effect == "border_glow" else theme.secondary
         )
 
-        timer_glow = make_glow(300, 120, theme.primary)
-        button_glow = make_glow(170, 70, theme.secondary)
+        primary_light, primary_dark = theme.primary
+        secondary_light, secondary_dark = theme.secondary
+        timer_glow_light = make_glow(300, 120, primary_light)
+        timer_glow_dark = make_glow(300, 120, primary_dark)
+        button_glow_light = make_glow(170, 70, secondary_light)
+        button_glow_dark = make_glow(170, 70, secondary_dark)
         bg_dark = make_background_texture(
-            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, theme.primary, theme.secondary,
+            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, primary_dark, secondary_dark,
             dark=True, era=theme.era,
         )
         bg_light = make_background_texture(
-            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, theme.primary, theme.secondary,
+            BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT, primary_light, secondary_light,
             dark=False, era=theme.era,
         )
-        divider = make_panel_divider(
-            DIVIDER_WIDTH, DIVIDER_HEIGHT, theme.primary, theme.secondary, era=theme.era,
+        divider_light = make_panel_divider(
+            DIVIDER_WIDTH, DIVIDER_HEIGHT, primary_light, secondary_light, era=theme.era,
+        )
+        divider_dark = make_panel_divider(
+            DIVIDER_WIDTH, DIVIDER_HEIGHT, primary_dark, secondary_dark, era=theme.era,
         )
         # Keep the PLAIN pattern around separately from whatever ends up
         # on screen -- Stronger/Kiva's effect gets painted fresh on top
@@ -308,23 +313,23 @@ class LockInApp(ctk.CTk):
         self._base_bg_light = bg_light
 
         if hasattr(self, "_timer_glow_image"):
-            self._timer_glow_image.configure(light_image=timer_glow, dark_image=timer_glow)
-            self._button_glow_image.configure(light_image=button_glow, dark_image=button_glow)
+            self._timer_glow_image.configure(light_image=timer_glow_light, dark_image=timer_glow_dark)
+            self._button_glow_image.configure(light_image=button_glow_light, dark_image=button_glow_dark)
             self._bg_image.configure(light_image=bg_light, dark_image=bg_dark)
-            self._divider_image.configure(light_image=divider, dark_image=divider)
+            self._divider_image.configure(light_image=divider_light, dark_image=divider_dark)
         else:
             self._timer_glow_image = ctk.CTkImage(
-                light_image=timer_glow, dark_image=timer_glow, size=(300, 120)
+                light_image=timer_glow_light, dark_image=timer_glow_dark, size=(300, 120)
             )
             self._button_glow_image = ctk.CTkImage(
-                light_image=button_glow, dark_image=button_glow, size=(170, 70)
+                light_image=button_glow_light, dark_image=button_glow_dark, size=(170, 70)
             )
             self._bg_image = ctk.CTkImage(
                 light_image=bg_light, dark_image=bg_dark,
                 size=(BG_TEXTURE_WIDTH, BG_TEXTURE_HEIGHT),
             )
             self._divider_image = ctk.CTkImage(
-                light_image=divider, dark_image=divider,
+                light_image=divider_light, dark_image=divider_dark,
                 size=(DIVIDER_WIDTH, DIVIDER_HEIGHT),
             )
 
@@ -344,11 +349,12 @@ class LockInApp(ctk.CTk):
         """
         in_focus = self.session.phase is Phase.FOCUS
         active_effect = self.current_tier1_effect if in_focus else "none"
+        effect_color_light, effect_color_dark = self.color_tier1_effect_pair
         bg_light = apply_tier1_background_effect(
-            self._base_bg_light, active_effect, self.color_tier1_effect, progress_fraction,
+            self._base_bg_light, active_effect, effect_color_light, progress_fraction,
         )
         bg_dark = apply_tier1_background_effect(
-            self._base_bg_dark, active_effect, self.color_tier1_effect, progress_fraction,
+            self._base_bg_dark, active_effect, effect_color_dark, progress_fraction,
         )
         self._bg_image.configure(light_image=bg_light, dark_image=bg_dark)
 
@@ -439,7 +445,7 @@ class LockInApp(ctk.CTk):
         self.streak_label.pack()
 
         self.driver_label = ctk.CTkLabel(
-            header, text=f"{self._driver_prefix()}: {self.config_obj.rider_theme.upper()}",
+            header, text=self.config_obj.rider_theme.upper(),
             font=ctk.CTkFont(family=DISPLAY_FONT, size=10, weight="bold"),
             text_color=self.color_driver_text,
         )
@@ -1044,9 +1050,7 @@ class LockInApp(ctk.CTk):
         self.config_obj.rider_theme = value
         self.config_obj.save()
         self._apply_rider_theme()
-        self.driver_label.configure(
-            text=f"{self._driver_prefix()}: {value.upper()}", text_color=self.color_driver_text
-        )
+        self.driver_label.configure(text=value.upper(), text_color=self.color_driver_text)
         self.start_button.configure(fg_color=self.color_rider_accent, text_color=self.color_button_text)
         self.header_frame.configure(fg_color=self.color_surface)
         self._sync_progress_widget_visibility()
@@ -1068,16 +1072,15 @@ class LockInApp(ctk.CTk):
         Tokusatsu in Settings.
 
         This changes words, not colors — but the words show up in a lot
-        of places at once (the button, the driver label, the settings
-        labels, the timer's own phase name), so the easiest way to make
-        sure every single one updates together is the same trick used
-        for a Rider change: rebuild everything from scratch.
+        of places at once (the button, the settings labels, the timer's
+        own phase name), so the easiest way to make sure every single
+        one updates together is the same trick used for a Rider change:
+        rebuild everything from scratch. The Rider name label itself
+        doesn't have any wording-dependent text anymore, so it's not
+        touched here.
         """
         self.config_obj.terminology = value.lower()
         self.config_obj.save()
-        self.driver_label.configure(
-            text=f"{self._driver_prefix()}: {self.config_obj.rider_theme.upper()}"
-        )
         self.start_button.configure(text=self._henshin_word())
         self._refresh_timer_widgets()
         self._rebuild_tabs()
@@ -1357,7 +1360,11 @@ class LockInApp(ctk.CTk):
             # block instead of staying still -- swap in that shifting
             # color ONLY during a focus block, so break/idle still look normal.
             if self.current_tier1_effect == "color_interpolation":
-                fill_color = interpolate_agito_color(progress_fraction, self.rider_primary)
+                primary_light, primary_dark = self.rider_primary_pair
+                fill_color = (
+                    interpolate_agito_color(progress_fraction, primary_light),
+                    interpolate_agito_color(progress_fraction, primary_dark),
+                )
             # Drive's gimmick lives in how fast the bar itself appears
             # to move, not its color or shape -- so we bend the NUMBER
             # fed to the bar, not what draws it.
@@ -1398,13 +1405,15 @@ class LockInApp(ctk.CTk):
         already on screen. Renders BOTH a light-mode and a dark-mode
         version, same trick already used for the background wallpaper.
         """
+        primary_light, primary_dark = self.rider_primary_pair
+        secondary_light, secondary_dark = self.rider_secondary_pair
         light_image = render_progress(
             self.current_tier1_effect, PROGRESS_SHAPE_WIDTH, PROGRESS_SHAPE_HEIGHT,
-            progress_fraction, self.rider_primary, self.rider_secondary, False,
+            progress_fraction, primary_light, secondary_light, False,
         )
         dark_image = render_progress(
             self.current_tier1_effect, PROGRESS_SHAPE_WIDTH, PROGRESS_SHAPE_HEIGHT,
-            progress_fraction, self.rider_primary, self.rider_secondary, True,
+            progress_fraction, primary_dark, secondary_dark, True,
         )
         if hasattr(self, "_progress_shape_image"):
             self._progress_shape_image.configure(light_image=light_image, dark_image=dark_image)

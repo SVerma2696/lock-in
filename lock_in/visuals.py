@@ -20,7 +20,7 @@ from typing import Optional
 
 from PIL import Image, ImageDraw
 
-from .rider_themes import darken, lighten
+from .rider_themes import darken
 
 # Where the app's own picture lives, and where its title-bar/notification
 # icon comes from.
@@ -315,17 +315,6 @@ def interpolate_agito_color(progress_fraction: float, primary: str) -> str:
     return _lerp_hex(muted_start, primary, progress_fraction)
 
 
-def _visible_shape_color(hex_color: str, dark: bool) -> str:
-    """
-    Some Riders' primary/secondary colors are already very pale (like
-    Fourze's pure white) or very dark. Drawn as-is, a shape in that
-    color can vanish against this app's own pale (light mode) or
-    near-black (dark mode) background -- the exact same problem the
-    text-color fix solved, applied here to shapes instead of words.
-    """
-    return darken(hex_color, 0.35) if not dark else lighten(hex_color, 0.35)
-
-
 def render_windmill_progress(
     width: int, height: int, progress_fraction: float,
     primary: str, secondary: str, dark: bool,
@@ -341,8 +330,8 @@ def render_windmill_progress(
 
     cx, cy = width / 2, height / 2
     radius = min(width, height) / 2 - 4
-    r1, g1, b1 = _hex_to_rgb(_visible_shape_color(primary, dark))
-    r2, g2, b2 = _hex_to_rgb(_visible_shape_color(secondary, dark))
+    r1, g1, b1 = _hex_to_rgb(primary)
+    r2, g2, b2 = _hex_to_rgb(secondary)
     dim_blade = (r1, g1, b1, 55 if dark else 70)
     lit_blade = (r1, g1, b1, 230)
     outline = (r2, g2, b2, 200)
@@ -372,8 +361,8 @@ def render_rising_bar_progress(
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
 
-    r1, g1, b1 = _hex_to_rgb(_visible_shape_color(primary, dark))
-    r2, g2, b2 = _hex_to_rgb(_visible_shape_color(secondary, dark))
+    r1, g1, b1 = _hex_to_rgb(primary)
+    r2, g2, b2 = _hex_to_rgb(secondary)
     track_color = (r2, g2, b2, 50 if dark else 70)
     fill_color = (r1, g1, b1, 230)
 
@@ -425,8 +414,8 @@ def render_constellation_progress(
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
 
-    r1, g1, b1 = _hex_to_rgb(_visible_shape_color(primary, dark))
-    r2, g2, b2 = _hex_to_rgb(_visible_shape_color(secondary, dark))
+    r1, g1, b1 = _hex_to_rgb(primary)
+    r2, g2, b2 = _hex_to_rgb(secondary)
     stars = _fourze_star_positions(width, height)
     lit_count = round(progress_fraction * _FOURZE_STAR_COUNT)
 
@@ -457,8 +446,8 @@ def render_vials_progress(
     image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image, "RGBA")
 
-    r1, g1, b1 = _hex_to_rgb(_visible_shape_color(primary, dark))
-    r2, g2, b2 = _hex_to_rgb(_visible_shape_color(secondary, dark))
+    r1, g1, b1 = _hex_to_rgb(primary)
+    r2, g2, b2 = _hex_to_rgb(secondary)
     vial_width = max(10, width // 6)
     gap = 8
     left1 = width // 2 - gap // 2 - vial_width

@@ -358,17 +358,18 @@ quietly falls back to professional rather than crashing.
 
 Settings → "Kamen Rider theme" (called "Color theme" when Wording is set
 to Professional) picks from all 38 Rider series (Showa, Heisei, and Reiwa
-era), each with its own accent-color pair pulled from that Rider's actual
-suit colors. This isn't just a couple of small accents — the header
-panel, the tab bar, and every tab's content panel are tinted toward the
-Rider's primary color too (near-black in dark mode, pale in light mode —
-same underlying hue either way, so it reads as "the same theme" in both),
-along with the Henshin/Start button, the selected-tab highlight, the
-timer digits/progress bar during a focus block, and the small
-"DRIVER:"/"THEME:" label under the timer. The fixed per-section colors
-(pink for Claude fallback, teal for sound/notification settings, and so
-on) stay as they are, since those work like a legend to tell sections
-apart regardless of theme. Defaults to the original 1971 series. See
+era), each with its own primary/secondary color pair pulled from that
+Rider's actual suit colors — hand-tuned as a *separate* hex for light
+mode and dark mode (not one color with the other guessed from it), so
+nothing washes out on a pale background or vanishes on a near-black one.
+This isn't just a couple of small accents — the header panel, the tab
+bar, and every tab's content panel are tinted toward the Rider's primary
+color too, along with the Henshin/Start button, the selected-tab
+highlight, the timer digits/progress bar during a focus block, and the
+Rider name shown under the timer. The fixed per-section colors (pink for
+Claude fallback, teal for sound/notification settings, and so on) stay
+as they are, since those work like a legend to tell sections apart
+regardless of theme. Defaults to the original 1971 series. See
 `lock_in/rider_themes.py` for the full palette.
 
 Picking a Rider also picks its **era**, and — when Wording is set to
@@ -446,16 +447,17 @@ to whichever Rider is picked:
 
 **Contrast safety.** A Rider's `primary`/`secondary` are also used
 directly as *text* colors in a few places (the phase name and timer
-digits, the driver label, the Henshin button, the selected tab). A color
-that's already very pale (Fourze's pure white) or very saturated can end
-up too close to its own tinted background to read — so those specific
-spots use `RiderTheme.primary_text_pair` / `secondary_text_pair` /
-`button_text_pair` instead of the raw color: darkened for light mode and
-lightened for dark mode (or, for text sitting directly on a filled
-button, plain black or white chosen by perceived brightness). All 38
-Riders are checked for this in `tests/test_rider_themes.py`, in both
-appearance modes, so a future palette edit can't quietly reintroduce
-invisible text.
+digits, the Rider name label, the Henshin button, the selected tab).
+Even with every color hand-tuned per mode (see above), a color that's
+already fairly pale or fairly dark can still end up too close to its
+own tinted background to read comfortably — so those specific spots use
+`RiderTheme.primary_text_pair` / `secondary_text_pair` /
+`button_text_pair` instead of the raw color: darkened further for light
+mode and lightened further for dark mode (or, for text sitting directly
+on a filled button, plain black or white chosen by perceived
+brightness). All 38 Riders are checked for this in
+`tests/test_rider_themes.py`, in both appearance modes, so a future
+palette edit can't quietly reintroduce hard-to-read text.
 
 ### App icon
 
