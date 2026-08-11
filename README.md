@@ -420,6 +420,26 @@ Every other Rider keeps the plain progress bar. See
 for the full design, and `docs/superpowers/plans/2026-08-10-tier1-rider-progress-variants.md`
 for the implementation plan.
 
+### Tier 2: 3 Riders with quick-access settings presets
+
+Three more Riders add controls to the Settings tab itself, above the
+Timer lengths section:
+
+- **Kuuga** — 4 buttons (Mighty/Dragon/Pegasus/Titan) that each set
+  focus/break lengths in one click, from a quick 10-minute sprint to a
+  90-minute endurance block.
+- **Super-1** — 5 task-type buttons (Super Hand/Power Hand/Elek Hand/
+  Cold-Thermal Hand/Radar Hand), each tuned for a different kind of
+  work (development, hardware, admin, logic/AI, research).
+- **Gavv** — a toggle that overrides your timer lengths toward repeated
+  10-minute "snackable" sprints with longer, more frequent breaks, for
+  days when a normal-length focus block isn't realistic. Stays on until
+  you turn it back off; your real settings are never overwritten.
+
+See `docs/superpowers/specs/2026-08-10-tier2-settings-presets-design.md`
+for the full design, and `docs/superpowers/plans/2026-08-10-tier2-settings-presets.md`
+for the implementation plan.
+
 ### Look and feel
 
 `lock_in/visuals.py` generates the app's art at runtime with Pillow, tinted

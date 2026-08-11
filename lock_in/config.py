@@ -30,6 +30,8 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, List
 
+from .presets import GAVV_MICRO_SPRINT
+
 APP_NAME = "Lock In"
 
 
@@ -124,6 +126,10 @@ class Config:
     short_break_minutes: int = 5
     long_break_minutes: int = 15
     blocks_until_long_break: int = 4      # focus rounds before a big break
+    # Gavv's toggle: while this is on, phase_seconds() below hands back
+    # GAVV_MICRO_SPRINT's short values instead of the 4 lines above --
+    # your real numbers are never overwritten, just temporarily ignored.
+    micro_sprint_mode: bool = False
 
     # --- What happens automatically ----------------------------------------- #
     auto_start_breaks: bool = True        # break starts right away
@@ -219,6 +225,13 @@ class Config:
 
     def phase_seconds(self, phase_name: str) -> int:
         """Turn a phase's name into how many seconds it should last."""
+        if self.micro_sprint_mode:
+            minutes = {
+                "focus": GAVV_MICRO_SPRINT.focus_minutes,
+                "short_break": GAVV_MICRO_SPRINT.short_break_minutes,
+                "long_break": GAVV_MICRO_SPRINT.long_break_minutes,
+            }[phase_name]
+            return minutes * 60
         return {
             "focus": self.focus_minutes * 60,
             "short_break": self.short_break_minutes * 60,

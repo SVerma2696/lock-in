@@ -46,6 +46,7 @@ from .enforcer import Action, Enforcer, Reason, WindowInfo, judge, lockdown_labe
 from .monitor import BACKEND_AVAILABLE, ActiveWindowMonitor, minimize_window
 from .notifier import Notifier
 from .session import Event, Phase, PomodoroSession, label_for
+from .presets import GAVV_MICRO_SPRINT, KUUGA_PRESETS, SUPER1_PRESETS, TimerPreset
 from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES
 from .visuals import (
     SHAPE_EFFECTS,
@@ -702,6 +703,24 @@ class LockInApp(ctk.CTk):
         self.rider_menu.set(self.config_obj.rider_theme)
         self.rider_menu.pack(side="left")
 
+        # Kuuga/Super-1's preset buttons and Gavv's toggle only show up
+        # for their own Rider -- this whole tab already gets rebuilt
+        # from scratch every time you pick a different Rider (see
+        # _rebuild_tabs), so there's nothing to hide/show here, we just
+        # build whichever ONE row (if any) actually matches right now.
+        if self.config_obj.rider_theme == "Kamen Rider Kuuga (2000)":
+            self._build_timer_preset_row(
+                frame, KUUGA_PRESETS,
+                "Kuuga presets" if self._is_tokusatsu() else "Interval presets",
+            )
+        elif self.config_obj.rider_theme == "Kamen Rider Super-1 (1980)":
+            self._build_timer_preset_row(
+                frame, SUPER1_PRESETS,
+                "Super-1's Five Hands" if self._is_tokusatsu() else "Task-type presets",
+            )
+        elif self.config_obj.rider_theme == "Kamen Rider Gavv (2024)":
+            self._build_gavv_toggle_row(frame)
+
         terminology_row = ctk.CTkFrame(frame, fg_color="transparent")
         terminology_row.pack(fill="x", pady=(10, 4))
         ctk.CTkLabel(terminology_row, text="Wording", width=140, anchor="w").pack(side="left")
@@ -1123,6 +1142,100 @@ class LockInApp(ctk.CTk):
         status = self.claude.status
         colour = COLOR_BREAK if status.startswith("ready") else COLOR_IDLE
         self.claude_status.configure(text=f"status: {status}", text_color=colour)
+
+    def _build_timer_preset_row(
+        self, parent, presets: list[TimerPreset], heading: str,
+    ) -> None:
+        """
+        One row of small buttons, one per preset. Clicking a button
+        calls _apply_timer_preset with THAT preset -- the button itself
+        doesn't know or care what the numbers mean, it just hands over
+        the whole bundle.
+        """
+        ctk.CTkLabel(parent, text=heading, text_color=COLOR_TIMER_ACCENT,
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", pady=(14, 4))
+
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 4))
+
+        for preset in presets:
+            button_name = preset.name_tokusatsu if self._is_tokusatsu() else preset.name_professional
+            column = ctk.CTkFrame(row, fg_color="transparent")
+            column.pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                column, text=button_name, width=90,
+                fg_color=COLOR_TIMER_ACCENT,
+                command=lambda p=preset: self._apply_timer_preset(p),
+            ).pack()
+            if preset.description:
+                ctk.CTkLabel(
+                    column, text=preset.description, font=ctk.CTkFont(size=9),
+                    text_color=COLOR_IDLE, wraplength=90,
+                ).pack(pady=(2, 0))
+
+    def _apply_timer_preset(self, preset: TimerPreset) -> None:
+        """
+        Copies one preset's 4 numbers into Config, updates the number
+        boxes on screen so they show what just happened, and saves --
+        same save path _save_settings() already uses, so this behaves
+        exactly like typing the numbers in yourself.
+        """
+        self.config_obj.focus_minutes = preset.focus_minutes
+        self.config_obj.short_break_minutes = preset.short_break_minutes
+        self.config_obj.long_break_minutes = preset.long_break_minutes
+        self.config_obj.blocks_until_long_break = preset.blocks_until_long_break
+        self.config_obj.save()
+
+        for key, value in (
+            ("focus_minutes", preset.focus_minutes),
+            ("short_break_minutes", preset.short_break_minutes),
+            ("long_break_minutes", preset.long_break_minutes),
+            ("blocks_until_long_break", preset.blocks_until_long_break),
+        ):
+            if key in self.spinners:
+                self.spinners[key].delete(0, "end")
+                self.spinners[key].insert(0, str(value))
+
+        name = preset.name_tokusatsu if self._is_tokusatsu() else preset.name_professional
+        self._show_banner(
+            f"Applied: {name} — {preset.focus_minutes}m focus. Applies from the next phase.",
+            "low",
+        )
+
+    def _build_gavv_toggle_row(self, parent) -> None:
+        """
+        A single switch, not a row of buttons -- Gavv's gimmick stays on
+        until you turn it off, it isn't a one-click-and-done preset.
+        """
+        heading = "Bite-Sized Mode" if self._is_tokusatsu() else "Micro-Sprint Mode"
+        ctk.CTkLabel(parent, text=heading, text_color=COLOR_TIMER_ACCENT,
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", pady=(14, 4))
+
+        self.micro_sprint_switch = ctk.CTkSwitch(
+            parent, text=f"{GAVV_MICRO_SPRINT.focus_minutes}m focus / "
+                         f"{GAVV_MICRO_SPRINT.short_break_minutes}m break, repeating",
+            progress_color=COLOR_TIMER_ACCENT,
+            command=self._on_micro_sprint_toggled,
+        )
+        if self.config_obj.micro_sprint_mode:
+            self.micro_sprint_switch.select()
+        else:
+            self.micro_sprint_switch.deselect()
+        self.micro_sprint_switch.pack(anchor="w", pady=4)
+
+        ctk.CTkLabel(
+            parent,
+            text="Overrides your timer lengths above until you turn this back off.",
+            font=ctk.CTkFont(size=10), text_color=COLOR_IDLE,
+        ).pack(anchor="w")
+
+    def _on_micro_sprint_toggled(self) -> None:
+        """Called when you click the Micro-Sprint switch itself."""
+        self.config_obj.micro_sprint_mode = self.micro_sprint_switch.get() == 1
+        self.config_obj.save()
+        name = GAVV_MICRO_SPRINT.name_tokusatsu if self._is_tokusatsu() else GAVV_MICRO_SPRINT.name_professional
+        state = "on" if self.config_obj.micro_sprint_mode else "off"
+        self._show_banner(f"{name}: {state}. Applies from the next phase.", "low")
 
     def _save_from_widgets(self) -> None:
         """These switches save themselves right away — no separate save step needed."""
