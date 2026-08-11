@@ -19,7 +19,7 @@ winotify>=1.1.0; sys_platform == "win32"
 # This lets the app ask Claude for help on tricky windows it isn't sure
 # about. Not required — the switch for this stays off until you install it
 # and set up an ANTHROPIC_API_KEY. The app works fine without it.
-anthropic>=0.40.0
+anthropic>=0.121.0
 
 # Only needed if you want to run the test suite.
 pytest>=8.0.0
