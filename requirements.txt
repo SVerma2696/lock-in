@@ -1,5 +1,5 @@
 # This one draws the app's window. The app needs it to work at all.
-customtkinter>=5.2.2
+customtkinter>=6.0.0
 
 # This one draws the soft glow/gradient pictures behind the timer and the
 # Henshin button, and the faint background pattern. The app needs it to
