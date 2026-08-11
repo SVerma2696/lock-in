@@ -20,6 +20,8 @@ from typing import Optional
 
 from PIL import Image, ImageDraw
 
+from .rider_themes import darken, lighten
+
 # Where the app's own picture lives, and where its title-bar/notification
 # icon comes from.
 ASSETS_DIR = Path(__file__).parent / "assets"
@@ -278,3 +280,312 @@ def load_app_icon() -> Optional[Image.Image]:
     top = (side - image.height) // 2
     square.paste(image, (left, top), image)
     return square
+
+
+# ===================================================================== #
+# Tier 1: per-Rider progress bar variants
+# See docs/superpowers/specs/2026-08-10-tier1-rider-progress-variants-design.md
+# Only 9 specific Riders use anything in this section -- everybody else
+# keeps the plain native progress bar ui.py already had.
+# ===================================================================== #
+
+def _lerp_hex(start: str, end: str, fraction: float) -> str:
+    """Slide a color from `start` to `end`. fraction=0 gives back
+    `start` exactly, fraction=1 gives back `end` exactly, and anything
+    in between is a mix -- like a dimmer switch, but for color."""
+    r1, g1, b1 = _hex_to_rgb(start)
+    r2, g2, b2 = _hex_to_rgb(end)
+    r = round(r1 + (r2 - r1) * fraction)
+    g = round(g1 + (g2 - g1) * fraction)
+    b = round(b1 + (b2 - b1) * fraction)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def interpolate_agito_color(progress_fraction: float, primary: str) -> str:
+    """
+    Agito's whole story is a sleeping power waking up. So instead of a
+    plain gold progress bar, it starts dim and quietly brightens to the
+    real color as the focus block gets closer to done.
+
+    `progress_fraction` is how far through the block we are (0 = just
+    started, 1 = finished) -- same number the progress bar itself uses.
+    """
+    progress_fraction = max(0.0, min(1.0, progress_fraction))
+    muted_start = darken(primary, 0.55)
+    return _lerp_hex(muted_start, primary, progress_fraction)
+
+
+def _visible_shape_color(hex_color: str, dark: bool) -> str:
+    """
+    Some Riders' primary/secondary colors are already very pale (like
+    Fourze's pure white) or very dark. Drawn as-is, a shape in that
+    color can vanish against this app's own pale (light mode) or
+    near-black (dark mode) background -- the exact same problem the
+    text-color fix solved, applied here to shapes instead of words.
+    """
+    return darken(hex_color, 0.35) if not dark else lighten(hex_color, 0.35)
+
+
+def render_windmill_progress(
+    width: int, height: int, progress_fraction: float,
+    primary: str, secondary: str, dark: bool,
+) -> Image.Image:
+    """
+    The original Kamen Rider's whole origin is wind power, so his
+    progress bar is a 4-bladed turbine. Blades light up one at a time
+    as the block gets closer to done, like the turbine spinning up.
+    """
+    progress_fraction = max(0.0, min(1.0, progress_fraction))
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image, "RGBA")
+
+    cx, cy = width / 2, height / 2
+    radius = min(width, height) / 2 - 4
+    r1, g1, b1 = _hex_to_rgb(_visible_shape_color(primary, dark))
+    r2, g2, b2 = _hex_to_rgb(_visible_shape_color(secondary, dark))
+    dim_blade = (r1, g1, b1, 55 if dark else 70)
+    lit_blade = (r1, g1, b1, 230)
+    outline = (r2, g2, b2, 200)
+
+    lit_blades = round(progress_fraction * 4)
+    bbox = [cx - radius, cy - radius, cx + radius, cy + radius]
+
+    for blade in range(4):
+        start = blade * 90
+        end = start + 80  # 10-degree gap between blades, like a real turbine
+        color = lit_blade if blade < lit_blades else dim_blade
+        draw.pieslice(bbox, start=start, end=end, fill=color, outline=outline)
+
+    return image
+
+
+def render_rising_bar_progress(
+    width: int, height: int, progress_fraction: float,
+    primary: str, secondary: str, dark: bool,
+) -> Image.Image:
+    """
+    Skyrider's whole thing is gliding. So instead of the usual
+    left-to-right bar, this one rises from the bottom, like an
+    altimeter climbing as the block gets closer to done.
+    """
+    progress_fraction = max(0.0, min(1.0, progress_fraction))
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image, "RGBA")
+
+    r1, g1, b1 = _hex_to_rgb(_visible_shape_color(primary, dark))
+    r2, g2, b2 = _hex_to_rgb(_visible_shape_color(secondary, dark))
+    track_color = (r2, g2, b2, 50 if dark else 70)
+    fill_color = (r1, g1, b1, 230)
+
+    bar_width = max(6, width // 4)
+    left = (width - bar_width) // 2
+    draw.rectangle([left, 2, left + bar_width, height - 2], fill=track_color)
+
+    filled_height = round((height - 4) * progress_fraction)
+    if filled_height > 0:
+        top = (height - 2) - filled_height
+        draw.rectangle([left, top, left + bar_width, height - 2], fill=fill_color)
+
+    return image
+
+
+_FOURZE_STAR_COUNT = 8
+
+
+def _fourze_star_positions(width: int, height: int) -> list[tuple[int, int]]:
+    """
+    Always the same 8 spots for a given picture size -- a fixed seed
+    means the stars never jump around between redraws, they just light
+    up one at a time as progress climbs.
+    """
+    rng = random.Random(2011)  # Fourze's debut year, just a fun fixed seed
+    margin = 6
+    return [
+        (
+            rng.randrange(margin, max(margin + 1, width - margin)),
+            rng.randrange(margin, max(margin + 1, height - margin)),
+        )
+        for _ in range(_FOURZE_STAR_COUNT)
+    ]
+
+
+def render_constellation_progress(
+    width: int, height: int, progress_fraction: float,
+    primary: str, secondary: str, dark: bool,
+) -> Image.Image:
+    """
+    Fourze is a space show, so instead of a normal bar this draws a
+    little star-field. As the block gets closer to done, more stars
+    light up and draw a line to the one before it -- like a
+    constellation slowly completing. Nothing here is saved between
+    redraws; it's worked out fresh from progress_fraction every time,
+    so it naturally starts over blank on every new focus block.
+    """
+    progress_fraction = max(0.0, min(1.0, progress_fraction))
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image, "RGBA")
+
+    r1, g1, b1 = _hex_to_rgb(_visible_shape_color(primary, dark))
+    r2, g2, b2 = _hex_to_rgb(_visible_shape_color(secondary, dark))
+    stars = _fourze_star_positions(width, height)
+    lit_count = round(progress_fraction * _FOURZE_STAR_COUNT)
+
+    line_color = (r2, g2, b2, 170)
+    for i in range(1, lit_count):
+        draw.line([stars[i - 1], stars[i]], fill=line_color, width=1)
+
+    for index, (x, y) in enumerate(stars):
+        lit = index < lit_count
+        color = (r1, g1, b1, 235) if lit else (r1, g1, b1, 60)
+        size = 3 if lit else 2
+        draw.ellipse([x - size, y - size, x + size, y + size], fill=color)
+
+    return image
+
+
+def render_vials_progress(
+    width: int, height: int, progress_fraction: float,
+    primary: str, secondary: str, dark: bool,
+) -> Image.Image:
+    """
+    Build's whole gimmick is combining two Fullbottles. So this draws
+    two vials, one per Rider color, that fill up together -- and once
+    the block is basically done, a third mixed-color block appears
+    between them, like the two bottles' contents just combined.
+    """
+    progress_fraction = max(0.0, min(1.0, progress_fraction))
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image, "RGBA")
+
+    r1, g1, b1 = _hex_to_rgb(_visible_shape_color(primary, dark))
+    r2, g2, b2 = _hex_to_rgb(_visible_shape_color(secondary, dark))
+    vial_width = max(10, width // 6)
+    gap = 8
+    left1 = width // 2 - gap // 2 - vial_width
+    left2 = width // 2 + gap // 2
+    top, bottom = 2, height - 2
+
+    outline = (255, 255, 255, 90) if dark else (0, 0, 0, 60)
+    draw.rectangle([left1, top, left1 + vial_width, bottom], outline=outline, width=1)
+    draw.rectangle([left2, top, left2 + vial_width, bottom], outline=outline, width=1)
+
+    fill_height = round((bottom - top) * progress_fraction)
+    if fill_height > 0:
+        draw.rectangle(
+            [left1, bottom - fill_height, left1 + vial_width, bottom], fill=(r1, g1, b1, 220),
+        )
+        draw.rectangle(
+            [left2, bottom - fill_height, left2 + vial_width, bottom], fill=(r2, g2, b2, 220),
+        )
+
+    if progress_fraction >= 0.95:
+        mixed = ((r1 + r2) // 2, (g1 + g2) // 2, (b1 + b2) // 2, 235)
+        draw.rectangle([left1, top, left2 + vial_width, bottom], fill=mixed)
+
+    return image
+
+
+def ease_drive_progress(progress_fraction: float) -> float:
+    """
+    Drive's whole gimmick is shifting gears to go faster. So instead of
+    the progress bar filling at a steady rate, it reads this through an
+    easing curve first: it looks like it's lagging behind early on,
+    then visibly speeds up and catches back up right near the end --
+    like shifting into top gear. It still reaches exactly 0 and exactly
+    1 at the very start and very end, same as real progress.
+    """
+    progress_fraction = max(0.0, min(1.0, progress_fraction))
+    return progress_fraction ** 2
+
+
+_SHAPE_RENDERERS = {
+    "windmill": render_windmill_progress,
+    "rising_bar": render_rising_bar_progress,
+    "constellation": render_constellation_progress,
+    "vials": render_vials_progress,
+}
+
+# The only 6 tier1_effect values that need a picture instead of the
+# plain native progress bar. ui.py checks a Rider's effect against this
+# set to decide whether to show its picture widget at all -- kept here,
+# next to the dict it's built from, so the two can never drift apart.
+SHAPE_EFFECTS = frozenset(_SHAPE_RENDERERS)
+
+
+def render_progress(
+    effect: str, width: int, height: int, progress_fraction: float,
+    primary: str, secondary: str, dark: bool,
+) -> Image.Image:
+    """
+    Draw whichever of the 6 shapes this Rider uses. Only ever called
+    for a Rider whose effect is in SHAPE_EFFECTS -- everyone else just
+    keeps using the plain native progress bar, which never touches
+    this function at all.
+    """
+    return _SHAPE_RENDERERS[effect](width, height, progress_fraction, primary, secondary, dark)
+
+
+def render_border_glow_overlay(
+    base_image: Image.Image, color: str, intensity_fraction: float,
+) -> Image.Image:
+    """
+    Paint a soft glow around the edge of `base_image`, like Stronger
+    charging up his own electricity -- it widens and brightens as
+    `intensity_fraction` climbs from 0 (just started) to 1 (about to
+    finish).
+
+    This only ever draws a handful of rectangle OUTLINES near the
+    edges, never looks at individual pixels in Python -- that's what
+    keeps it fast enough to redraw many times a second, even though
+    the background picture itself is fairly big.
+    """
+    intensity_fraction = max(0.0, min(1.0, intensity_fraction))
+    width, height = base_image.size
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay, "RGBA")
+    r, g, b = _hex_to_rgb(color)
+
+    max_bands = 14
+    band_count = max(1, round(max_bands * intensity_fraction))
+    max_alpha = 140
+
+    for i in range(band_count):
+        inset = i * 2
+        alpha = round(max_alpha * (1 - i / max_bands))
+        box = [inset, inset, width - 1 - inset, height - 1 - inset]
+        if box[0] >= box[2] or box[1] >= box[3]:
+            break
+        draw.rectangle(box, outline=(r, g, b, alpha))
+
+    return Image.alpha_composite(base_image.convert("RGBA"), overlay)
+
+
+def render_night_overlay(base_image: Image.Image, color: str, alpha: int = 70) -> Image.Image:
+    """
+    Wash the whole picture in a translucent color, like Kiva's story
+    always happening at night. `alpha` is how strong the tint is (0 is
+    invisible, 255 is a solid block of color) -- kept low by default so
+    the picture underneath still shows through clearly.
+    """
+    width, height = base_image.size
+    r, g, b = _hex_to_rgb(color)
+    wash = Image.new("RGBA", (width, height), (r, g, b, alpha))
+    return Image.alpha_composite(base_image.convert("RGBA"), wash)
+
+
+def apply_tier1_background_effect(
+    base_image: Image.Image, effect: str, color: str, intensity_fraction: float = 0.0,
+) -> Image.Image:
+    """
+    The one place that decides whether the background picture needs
+    Stronger's border glow, Kiva's night wash, or nothing extra at all.
+    Always hands back ONE flat picture -- ui.py never has to stack a
+    second see-through picture on top to get this look (Tkinter can't
+    blend two overlapping see-through pictures correctly, so all of
+    that math happens here instead, before it ever reaches a widget).
+    """
+    if effect == "border_glow":
+        return render_border_glow_overlay(base_image, color, intensity_fraction)
+    if effect == "night_overlay":
+        return render_night_overlay(base_image, color)
+    return base_image.convert("RGBA")

@@ -48,11 +48,16 @@ from .notifier import Notifier
 from .session import Event, Phase, PomodoroSession, label_for
 from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES, lighten
 from .visuals import (
+    SHAPE_EFFECTS,
+    apply_tier1_background_effect,
     display_font_family,
+    ease_drive_progress,
+    interpolate_agito_color,
     load_app_icon,
     make_background_texture,
     make_glow,
     make_panel_divider,
+    render_progress,
 )
 
 # Our color choices, kept in one spot — so changing the theme means
@@ -91,6 +96,13 @@ BG_TEXTURE_HEIGHT = 1200
 DIVIDER_WIDTH = 900
 DIVIDER_HEIGHT = 14
 
+# The size of the picture used for the 4 Tier 1 Riders with their own
+# custom progress SHAPE (windmill, rising bar, constellation, vials).
+# Fixed on purpose -- unlike the background/divider above, this picture
+# doesn't stretch when you resize the window, it just stays centered.
+PROGRESS_SHAPE_WIDTH = 340
+PROGRESS_SHAPE_HEIGHT = 48
+
 
 class LockInApp(ctk.CTk):
     """The main app window — everything you see lives inside this."""
@@ -103,11 +115,14 @@ class LockInApp(ctk.CTk):
 
         # ---------------- The main pieces of the app -------------------- #
         self.config_obj = Config.load()
+        # The session has to exist BEFORE _apply_rider_theme(), because
+        # that method now also has to check what phase we're in (for
+        # Stronger/Kiva's Tier 1 background effect).
+        self.session = PomodoroSession(self.config_obj)
         self._apply_rider_theme()
         self.model = NaiveBayesClassifier.load(MODEL_PATH)
         self.observations = ObservationStore(OBSERVATIONS_PATH)
         self.claude = ClaudeFallback(self.config_obj)
-        self.session = PomodoroSession(self.config_obj)
         self.enforcer = Enforcer(self.config_obj)
         self.notifier = Notifier(self.config_obj)
         self.notifier.banner_callback = self._queue_banner
@@ -152,6 +167,7 @@ class LockInApp(ctk.CTk):
         self._build_tabs()
 
         self.monitor.start()
+        self._sync_progress_widget_visibility()
         self._pump()          # start the UI heartbeat
         self._refresh_timer_widgets()
         # Wait a moment before showing this, so the window is fully drawn
@@ -257,6 +273,20 @@ class LockInApp(ctk.CTk):
         # words, the background pattern shape, and the sound cues.
         self.current_era = theme.era
 
+        # Which Tier 1 gimmick (if any) this Rider has, and the two raw
+        # colors some of those gimmicks need directly (not the
+        # light/dark pairs above -- Agito's color shift and Stronger's
+        # glow both need to start from ONE real color, not a pair).
+        self.current_tier1_effect = theme.tier1_effect
+        self.rider_primary = theme.primary
+        self.rider_secondary = theme.secondary
+        # Stronger's glow uses the Rider's own primary (already a red);
+        # Kiva's night wash uses the secondary (the amber gold). Every
+        # other Rider never reads this, so the value doesn't matter for them.
+        self.color_tier1_effect = (
+            theme.primary if theme.tier1_effect == "border_glow" else theme.secondary
+        )
+
         timer_glow = make_glow(300, 120, theme.primary)
         button_glow = make_glow(170, 70, theme.secondary)
         bg_dark = make_background_texture(
@@ -270,6 +300,12 @@ class LockInApp(ctk.CTk):
         divider = make_panel_divider(
             DIVIDER_WIDTH, DIVIDER_HEIGHT, theme.primary, theme.secondary, era=theme.era,
         )
+        # Keep the PLAIN pattern around separately from whatever ends up
+        # on screen -- Stronger/Kiva's effect gets painted fresh on top
+        # of this every tick, so we always need the untouched original
+        # to start from, not last tick's already-tinted result.
+        self._base_bg_dark = bg_dark
+        self._base_bg_light = bg_light
 
         if hasattr(self, "_timer_glow_image"):
             self._timer_glow_image.configure(light_image=timer_glow, dark_image=timer_glow)
@@ -291,6 +327,30 @@ class LockInApp(ctk.CTk):
                 light_image=divider, dark_image=divider,
                 size=(DIVIDER_WIDTH, DIVIDER_HEIGHT),
             )
+
+        # Re-apply Stronger/Kiva's effect (if this Rider has one) right
+        # away -- otherwise switching themes mid-focus-block would show
+        # the plain, untinted background for a moment.
+        self._refresh_background_effect(self.session.progress)
+
+    def _refresh_background_effect(self, progress_fraction: float) -> None:
+        """
+        Redraw the background picture's Stronger-glow or Kiva-wash (if
+        this Rider has one) and push it onto the picture already on
+        screen. Both effects only show up DURING a focus block and
+        disappear the moment it ends -- that's what `in_focus` is for.
+        Riders without either effect just get the plain picture back,
+        unchanged.
+        """
+        in_focus = self.session.phase is Phase.FOCUS
+        active_effect = self.current_tier1_effect if in_focus else "none"
+        bg_light = apply_tier1_background_effect(
+            self._base_bg_light, active_effect, self.color_tier1_effect, progress_fraction,
+        )
+        bg_dark = apply_tier1_background_effect(
+            self._base_bg_dark, active_effect, self.color_tier1_effect, progress_fraction,
+        )
+        self._bg_image.configure(light_image=bg_light, dark_image=bg_dark)
 
     def _on_window_resized(self, event) -> None:
         """
@@ -389,8 +449,16 @@ class LockInApp(ctk.CTk):
         self.progress.set(0)
         self.progress.pack(fill="x", pady=(12, 14))
 
-        controls = ctk.CTkFrame(header, fg_color="transparent")
-        controls.pack()
+        # A second, picture-based widget -- only shown INSTEAD of the
+        # plain bar above, and only for the 4 Riders with their own
+        # custom shape (see _sync_progress_widget_visibility). Every
+        # other Rider never sees this at all; the plain bar above just
+        # keeps working exactly like it always has.
+        self.progress_shape = ctk.CTkLabel(header, text="", image=None)
+
+        self.controls = ctk.CTkFrame(header, fg_color="transparent")
+        self.controls.pack()
+        controls = self.controls
 
         # Same trick as the timer glow: made first, so it sits behind the
         # Henshin button that gets made right after it.
@@ -981,6 +1049,7 @@ class LockInApp(ctk.CTk):
         )
         self.start_button.configure(fg_color=self.color_rider_accent, text_color=self.color_button_text)
         self.header_frame.configure(fg_color=self.color_surface)
+        self._sync_progress_widget_visibility()
         self._refresh_timer_widgets()
         # Rebuilding the tabs is how the tab panels themselves (and the
         # selected-tab highlight) pick up the new surface color and
@@ -1261,9 +1330,9 @@ class LockInApp(ctk.CTk):
     def _refresh_timer_widgets(self) -> None:
         phase = self.session.phase
         label = label_for(phase, self.config_obj.terminology)
+        progress_fraction = self.session.progress
 
         self.time_label.configure(text=self.session.format_remaining())
-        self.progress.set(self.session.progress)
 
         # The progress bar's fill uses the plain, vivid Rider color — but
         # the WORDS use the separate, always-readable version instead,
@@ -1283,10 +1352,30 @@ class LockInApp(ctk.CTk):
             Phase.IDLE: COLOR_IDLE,
         }[phase]
 
+        if phase is Phase.FOCUS:
+            # Agito's whole gimmick is that its color wakes up over the
+            # block instead of staying still -- swap in that shifting
+            # color ONLY during a focus block, so break/idle still look normal.
+            if self.current_tier1_effect == "color_interpolation":
+                fill_color = interpolate_agito_color(progress_fraction, self.rider_primary)
+            # Drive's gimmick lives in how fast the bar itself appears
+            # to move, not its color or shape -- so we bend the NUMBER
+            # fed to the bar, not what draws it.
+            if self.current_tier1_effect == "accelerating_fill":
+                progress_fraction = ease_drive_progress(progress_fraction)
+
         suffix = " (paused)" if self.session.is_paused and phase is not Phase.IDLE else ""
         self.phase_label.configure(text=label + suffix, text_color=text_color)
         self.time_label.configure(text_color=text_color)
-        self.progress.configure(progress_color=fill_color)
+
+        if self.current_tier1_effect in SHAPE_EFFECTS:
+            self._refresh_progress_shape(progress_fraction)
+        else:
+            self.progress.set(progress_fraction)
+            self.progress.configure(progress_color=fill_color)
+
+        if self.current_tier1_effect in ("border_glow", "night_overlay"):
+            self._refresh_background_effect(progress_fraction)
 
         self.start_button.configure(text="Pause" if self.session.is_running else self._henshin_word())
 
@@ -1301,6 +1390,47 @@ class LockInApp(ctk.CTk):
         # The title bar also shows a tiny timer, so it's visible even when
         # this window is hidden behind others.
         self.title(f"{self.session.format_remaining()} · {label} — Lock In")
+
+    def _refresh_progress_shape(self, progress_fraction: float) -> None:
+        """
+        Redraw the picture for one of the 4 Riders with their own
+        custom progress shape, and push it onto the picture widget
+        already on screen. Renders BOTH a light-mode and a dark-mode
+        version, same trick already used for the background wallpaper.
+        """
+        light_image = render_progress(
+            self.current_tier1_effect, PROGRESS_SHAPE_WIDTH, PROGRESS_SHAPE_HEIGHT,
+            progress_fraction, self.rider_primary, self.rider_secondary, False,
+        )
+        dark_image = render_progress(
+            self.current_tier1_effect, PROGRESS_SHAPE_WIDTH, PROGRESS_SHAPE_HEIGHT,
+            progress_fraction, self.rider_primary, self.rider_secondary, True,
+        )
+        if hasattr(self, "_progress_shape_image"):
+            self._progress_shape_image.configure(light_image=light_image, dark_image=dark_image)
+        else:
+            self._progress_shape_image = ctk.CTkImage(
+                light_image=light_image, dark_image=dark_image,
+                size=(PROGRESS_SHAPE_WIDTH, PROGRESS_SHAPE_HEIGHT),
+            )
+            self.progress_shape.configure(image=self._progress_shape_image)
+
+    def _sync_progress_widget_visibility(self) -> None:
+        """
+        Show whichever ONE of the two progress widgets this Rider
+        actually needs, and hide the other. Always re-inserts the
+        visible one right before the button row (`before=self.controls`)
+        instead of just calling plain `.pack()` again -- packing a
+        forgotten widget with no `before=` appends it at the END of the
+        layout order instead of putting it back where it was, which
+        would silently push it below the button row.
+        """
+        if self.current_tier1_effect in SHAPE_EFFECTS:
+            self.progress.pack_forget()
+            self.progress_shape.pack(fill="x", pady=(12, 14), before=self.controls)
+        else:
+            self.progress_shape.pack_forget()
+            self.progress.pack(fill="x", pady=(12, 14), before=self.controls)
 
     def _update_watch_label(self, window: WindowInfo) -> None:
         if self.session.phase is Phase.FOCUS and self.monitor.is_active:

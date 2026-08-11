@@ -119,6 +119,49 @@ def test_secondary_text_pair_is_readable_against_its_primary_surface_both_modes(
         assert abs(_brightness(dark_text) - _brightness(dark_surface)) > 100, name
 
 
+def test_tier1_effect_defaults_to_none_for_ordinary_riders():
+    assert RIDER_THEMES["Kamen Rider V3 (1973)"].tier1_effect == "none"
+    assert RIDER_THEMES["Kamen Rider Gavv (2024)"].tier1_effect == "none"
+
+
+def test_tier1_effect_is_assigned_to_exactly_the_9_named_riders():
+    expected = {
+        "Kamen Rider (1971)": "windmill",
+        "Kamen Rider Skyrider (1979)": "rising_bar",
+        "Kamen Rider Stronger (1975)": "border_glow",
+        "Kamen Rider Black (1987)": "high_contrast_dark",
+        "Kamen Rider Fourze (2011)": "constellation",
+        "Kamen Rider Build (2017)": "vials",
+        "Kamen Rider Drive (2014)": "accelerating_fill",
+        "Kamen Rider Agito (2001)": "color_interpolation",
+        "Kamen Rider Kiva (2008)": "night_overlay",
+    }
+    for name, effect in expected.items():
+        assert RIDER_THEMES[name].tier1_effect == effect, name
+
+    # Nobody outside this list should have picked up an effect by accident.
+    everyone_else = set(RIDER_THEMES) - set(expected)
+    for name in everyone_else:
+        assert RIDER_THEMES[name].tier1_effect == "none", name
+
+
+def test_black_gets_stricter_dark_mode_text_contrast_than_normal_riders():
+    """Black's Tier 1 gimmick: dark-mode text gets pushed further toward
+    white than every other Rider, for stricter contrast."""
+    black = RIDER_THEMES["Kamen Rider Black (1987)"]
+    ordinary = RIDER_THEMES["Kamen Rider V3 (1973)"]
+    assert black.primary_text_pair[1] == lighten(black.primary, 0.55)
+    assert ordinary.primary_text_pair[1] == lighten(ordinary.primary, 0.35)
+
+
+def test_black_light_mode_text_is_unaffected():
+    """The user asked for stricter DARK mode contrast only -- light mode
+    should use the same amount every other Rider gets."""
+    black = RIDER_THEMES["Kamen Rider Black (1987)"]
+    assert black.primary_text_pair[0] == darken(black.primary, 0.35)
+    assert black.secondary_text_pair[0] == darken(black.secondary, 0.35)
+
+
 def test_button_text_pair_is_readable_against_the_secondary_fill_both_modes():
     """The Henshin button's own text sits directly on secondary_pair --
     it needs to contrast against THAT color, not a tinted version of it."""

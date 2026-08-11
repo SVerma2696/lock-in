@@ -8,6 +8,11 @@ from lock_in.visuals import (
 )
 
 
+def _alpha_sum(image):
+    from PIL import ImageStat
+    return ImageStat.Stat(image.getchannel("A")).sum[0]
+
+
 def test_display_font_family_returns_a_non_empty_name():
     assert isinstance(display_font_family(), str)
     assert display_font_family()
@@ -133,3 +138,240 @@ def test_panel_divider_is_not_blank():
     # that, or there's nothing actually visible.
     _, max_alpha = image.getchannel("A").getextrema()
     assert max_alpha > 0
+
+
+# ===================================================================== #
+# Tier 1: per-Rider progress bar variants
+# See docs/superpowers/specs/2026-08-10-tier1-rider-progress-variants-design.md
+# ===================================================================== #
+
+def test_agito_color_at_zero_progress_is_the_muted_start_color():
+    from lock_in.visuals import interpolate_agito_color
+    from lock_in.rider_themes import darken
+    assert interpolate_agito_color(0.0, "#ffca28") == darken("#ffca28", 0.55)
+
+
+def test_agito_color_at_full_progress_is_the_real_primary_color():
+    from lock_in.visuals import interpolate_agito_color
+    assert interpolate_agito_color(1.0, "#ffca28") == "#ffca28"
+
+
+def test_agito_color_gets_brighter_as_progress_increases():
+    """The whole point: it "wakes up" partway through, not just at 0/1."""
+    from lock_in.visuals import interpolate_agito_color
+
+    def brightness(hex_color):
+        hex_color = hex_color.lstrip("#")
+        return sum(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+    early = brightness(interpolate_agito_color(0.2, "#ffca28"))
+    middle = brightness(interpolate_agito_color(0.5, "#ffca28"))
+    late = brightness(interpolate_agito_color(0.8, "#ffca28"))
+    assert early < middle < late
+
+
+def test_agito_color_clamps_out_of_range_progress():
+    from lock_in.visuals import interpolate_agito_color
+    assert interpolate_agito_color(-1.0, "#ffca28") == interpolate_agito_color(0.0, "#ffca28")
+    assert interpolate_agito_color(5.0, "#ffca28") == interpolate_agito_color(1.0, "#ffca28")
+
+
+def test_windmill_progress_returns_the_requested_size():
+    from lock_in.visuals import render_windmill_progress
+    image = render_windmill_progress(80, 80, 0.5, "#1b5e3a", "#c0392b", dark=False)
+    assert image.size == (80, 80)
+    assert image.mode == "RGBA"
+
+
+def test_windmill_progress_fills_more_blades_at_higher_progress():
+    from lock_in.visuals import render_windmill_progress
+    quarter = render_windmill_progress(80, 80, 0.25, "#1b5e3a", "#c0392b", dark=False)
+    full = render_windmill_progress(80, 80, 1.0, "#1b5e3a", "#c0392b", dark=False)
+    assert _alpha_sum(full) > _alpha_sum(quarter)
+
+
+def test_rising_bar_progress_returns_the_requested_size():
+    from lock_in.visuals import render_rising_bar_progress
+    image = render_rising_bar_progress(60, 100, 0.5, "#2e7d32", "#8d6e63", dark=False)
+    assert image.size == (60, 100)
+    assert image.mode == "RGBA"
+
+
+def test_rising_bar_progress_rises_more_at_higher_progress():
+    from lock_in.visuals import render_rising_bar_progress
+    low = render_rising_bar_progress(60, 100, 0.1, "#2e7d32", "#8d6e63", dark=False)
+    high = render_rising_bar_progress(60, 100, 0.9, "#2e7d32", "#8d6e63", dark=False)
+    assert _alpha_sum(high) > _alpha_sum(low)
+
+
+def test_constellation_progress_returns_the_requested_size():
+    from lock_in.visuals import render_constellation_progress
+    image = render_constellation_progress(200, 60, 0.5, "#ffffff", "#ef6c00", dark=True)
+    assert image.size == (200, 60)
+    assert image.mode == "RGBA"
+
+
+def test_constellation_progress_lights_more_stars_at_higher_progress():
+    from lock_in.visuals import render_constellation_progress
+    low = render_constellation_progress(200, 60, 0.1, "#ffffff", "#ef6c00", dark=True)
+    high = render_constellation_progress(200, 60, 0.9, "#ffffff", "#ef6c00", dark=True)
+    assert _alpha_sum(high) > _alpha_sum(low)
+
+
+def test_constellation_progress_stars_are_visible_against_a_pale_background():
+    """Fourze's primary is pure white -- stars drawn in raw white would
+    vanish against this app's own near-white light-mode background."""
+    from lock_in.visuals import render_constellation_progress
+    image = render_constellation_progress(200, 60, 0.9, "#ffffff", "#ef6c00", dark=False)
+    opaque_pixels = [p for p in image.getdata() if p[3] > 200]
+    assert opaque_pixels
+    assert not any(p[:3] == (255, 255, 255) for p in opaque_pixels)
+
+
+def test_constellation_progress_star_layout_is_stable_between_calls():
+    """The stars must sit in the same spots every time, or the picture
+    would visibly jump around every 200ms redraw."""
+    from lock_in.visuals import render_constellation_progress
+    first = render_constellation_progress(200, 60, 0.5, "#ffffff", "#ef6c00", dark=True)
+    second = render_constellation_progress(200, 60, 0.5, "#ffffff", "#ef6c00", dark=True)
+    assert first.tobytes() == second.tobytes()
+
+
+def test_vials_progress_returns_the_requested_size():
+    from lock_in.visuals import render_vials_progress
+    image = render_vials_progress(120, 60, 0.5, "#c62828", "#1565c0", dark=False)
+    assert image.size == (120, 60)
+    assert image.mode == "RGBA"
+
+
+def test_vials_progress_fills_more_at_higher_progress():
+    from lock_in.visuals import render_vials_progress
+    low = render_vials_progress(120, 60, 0.1, "#c62828", "#1565c0", dark=False)
+    high = render_vials_progress(120, 60, 0.6, "#c62828", "#1565c0", dark=False)
+    assert _alpha_sum(high) > _alpha_sum(low)
+
+
+def test_vials_progress_combines_near_completion():
+    """Best Match: the two vials should visibly merge once nearly full,
+    not just sit there as two separate bars forever."""
+    from lock_in.visuals import render_vials_progress
+    almost_full = render_vials_progress(120, 60, 0.94, "#c62828", "#1565c0", dark=False)
+    combined = render_vials_progress(120, 60, 0.98, "#c62828", "#1565c0", dark=False)
+    assert _alpha_sum(combined) > _alpha_sum(almost_full)
+
+
+def test_ease_drive_progress_matches_true_progress_at_the_endpoints():
+    from lock_in.visuals import ease_drive_progress
+    assert ease_drive_progress(0.0) == 0.0
+    assert ease_drive_progress(1.0) == 1.0
+
+
+def test_ease_drive_progress_lags_behind_early_and_catches_up_late():
+    """The whole point: it LOOKS slower than real progress early on,
+    then visibly speeds up and catches up near the end."""
+    from lock_in.visuals import ease_drive_progress
+    assert ease_drive_progress(0.5) < 0.5
+    assert ease_drive_progress(0.9) > ease_drive_progress(0.5) * (0.9 / 0.5)
+
+
+def test_ease_drive_progress_clamps_out_of_range_progress():
+    from lock_in.visuals import ease_drive_progress
+    assert ease_drive_progress(-1.0) == 0.0
+    assert ease_drive_progress(5.0) == 1.0
+
+
+def test_render_progress_routes_each_shape_effect_to_its_own_renderer():
+    from lock_in import visuals
+
+    routing = {
+        "windmill": visuals.render_windmill_progress,
+        "rising_bar": visuals.render_rising_bar_progress,
+        "constellation": visuals.render_constellation_progress,
+        "vials": visuals.render_vials_progress,
+    }
+    for effect, direct_renderer in routing.items():
+        via_dispatch = visuals.render_progress(effect, 100, 40, 0.5, "#ff0000", "#00ff00", False)
+        direct = direct_renderer(100, 40, 0.5, "#ff0000", "#00ff00", False)
+        assert via_dispatch.tobytes() == direct.tobytes(), effect
+
+
+def test_shape_effects_constant_matches_the_dispatch_table():
+    """ui.py relies on this set to decide when to show the picture
+    widget instead of the plain bar -- it has to list exactly the
+    Riders render_progress actually knows how to draw."""
+    from lock_in import visuals
+    assert visuals.SHAPE_EFFECTS == {"windmill", "rising_bar", "constellation", "vials"}
+
+
+def test_border_glow_overlay_returns_same_size_as_base():
+    from lock_in.visuals import render_border_glow_overlay
+    from PIL import Image
+    base = Image.new("RGB", (100, 150), (20, 20, 20))
+    result = render_border_glow_overlay(base, "#c62828", 0.5)
+    assert result.size == (100, 150)
+    assert result.mode == "RGBA"
+
+
+def test_border_glow_overlay_is_stronger_at_higher_intensity():
+    from lock_in.visuals import render_border_glow_overlay
+    from PIL import Image, ImageChops, ImageStat
+
+    def difference_from_base(base, glowed):
+        diff = ImageChops.difference(base.convert("RGB"), glowed.convert("RGB"))
+        return ImageStat.Stat(diff).sum[0]
+
+    base = Image.new("RGB", (100, 150), (20, 20, 20))
+    faint = render_border_glow_overlay(base, "#c62828", 0.2)
+    strong = render_border_glow_overlay(base, "#c62828", 0.9)
+    assert difference_from_base(base, strong) > difference_from_base(base, faint)
+
+
+def test_border_glow_overlay_only_touches_the_edges():
+    """The whole point is a BORDER glow -- the dead center of a big
+    picture should come back basically untouched."""
+    from lock_in.visuals import render_border_glow_overlay
+    from PIL import Image
+    base = Image.new("RGB", (200, 200), (20, 20, 20))
+    glowed = render_border_glow_overlay(base, "#c62828", 1.0)
+    center = glowed.getpixel((100, 100))
+    assert center[:3] == (20, 20, 20)
+
+
+def test_night_overlay_tints_toward_the_given_color():
+    from lock_in.visuals import render_night_overlay
+    from PIL import Image
+    base = Image.new("RGB", (50, 50), (10, 10, 10))
+    washed = render_night_overlay(base, "#ffca28", alpha=255)
+    # A full-strength wash should completely replace the base color.
+    assert washed.getpixel((25, 25))[:3] == (255, 202, 40)
+
+
+def test_night_overlay_returns_same_size_as_base():
+    from lock_in.visuals import render_night_overlay
+    from PIL import Image
+    base = Image.new("RGB", (60, 90), (10, 10, 10))
+    result = render_night_overlay(base, "#ffca28")
+    assert result.size == (60, 90)
+    assert result.mode == "RGBA"
+
+
+def test_apply_tier1_background_effect_routes_correctly():
+    from lock_in import visuals
+    from PIL import Image
+    base = Image.new("RGB", (100, 100), (20, 20, 20))
+
+    glow = visuals.apply_tier1_background_effect(base, "border_glow", "#c62828", 0.8)
+    direct_glow = visuals.render_border_glow_overlay(base, "#c62828", 0.8)
+    assert glow.tobytes() == direct_glow.tobytes()
+
+    wash = visuals.apply_tier1_background_effect(base, "night_overlay", "#ffca28")
+    direct_wash = visuals.render_night_overlay(base, "#ffca28")
+    assert wash.tobytes() == direct_wash.tobytes()
+
+
+def test_apply_tier1_background_effect_none_returns_base_unchanged():
+    from lock_in import visuals
+    from PIL import Image
+    base = Image.new("RGB", (100, 100), (20, 20, 20))
+    result = visuals.apply_tier1_background_effect(base, "none", "#c62828")
+    assert result.tobytes() == base.convert("RGBA").tobytes()

@@ -96,6 +96,9 @@ writes correctly even if its own install folder is read-only.
   Reiwa era), each pulling its accent colors from that Rider's real suit
   colors and re-tinting the header, every tab panel, the progress bar,
   and a themed background pattern — not just a couple of small accents.
+  **9 of those Riders go further still** — a custom-shaped progress bar,
+  a color or timing behavior change, or a chrome-level effect around
+  the timer, unique to that Rider.
 * Toggles between **Professional and Tokusatsu wording** app-wide, so
   the exact same install reads as a plain productivity tool or a fully
   Kamen-Rider-flavored one, your choice.
@@ -386,6 +389,35 @@ recognize, so nothing crashes on a corrupted `config.json`. All three
 eras of tokusatsu copy live in `lock_in/enforcer.py` (`MESSAGES_BY_ERA`),
 the patterns in `lock_in/visuals.py`, and the sound tables in
 `lock_in/notifier.py`.
+
+### Tier 1: 9 Riders with their own gimmick
+
+On top of the era/color system above, 9 Riders each get their own extra
+treatment during a focus block:
+
+- **Kamen Rider (1971)** — the progress bar becomes a 4-bladed windmill,
+  its blades lighting up one at a time.
+- **Skyrider** — the progress bar rises vertically instead of filling
+  left-to-right, like a glider's altimeter climbing.
+- **Fourze** — the progress bar becomes a small star-field, lighting up
+  and connecting one star at a time.
+- **Build** — the progress bar becomes two vials that fill together and
+  visually combine once the block is nearly done.
+- **Stronger** — a soft red glow builds around the outer window edge as
+  the block goes on, like charging up electricity.
+- **Kiva** — a translucent amber wash tints the whole app during a focus
+  block, evoking its night/vampire motif.
+- **Agito** — the progress bar's color starts muted and gradually
+  brightens to its true gold, like a dormant power waking up.
+- **Black** — dark mode gets stricter, higher-contrast text specifically
+  for this Rider.
+- **Drive** — the progress bar appears to lag behind early on, then
+  visibly speeds up and catches up right near the end.
+
+Every other Rider keeps the plain progress bar. See
+`docs/superpowers/specs/2026-08-10-tier1-rider-progress-variants-design.md`
+for the full design, and `docs/superpowers/plans/2026-08-10-tier1-rider-progress-variants.md`
+for the implementation plan.
 
 ### Look and feel
 

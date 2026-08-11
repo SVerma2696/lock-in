@@ -82,6 +82,11 @@ class RiderTheme:
     year: int
     primary: str
     secondary: str
+    # "none" for every Rider except the 9 with a Tier 1 gimmick (see
+    # docs/superpowers/specs/2026-08-10-tier1-rider-progress-variants-design.md).
+    # visuals.py and ui.py read this to decide what the progress bar or
+    # background should look like for this Rider.
+    tier1_effect: str = "none"
 
     @property
     def primary_pair(self) -> tuple[str, str]:
@@ -124,12 +129,23 @@ class RiderTheme:
         the surface color fixes that for every Rider, not just the
         obviously pale ones.
         """
-        return (darken(self.primary, 0.35), lighten(self.primary, 0.35))
+        return (darken(self.primary, 0.35), lighten(self.primary, self._dark_mode_text_factor))
 
     @property
     def secondary_text_pair(self) -> tuple[str, str]:
         """The same idea as `primary_text_pair`, but for `secondary`."""
-        return (darken(self.secondary, 0.35), lighten(self.secondary, 0.35))
+        return (darken(self.secondary, 0.35), lighten(self.secondary, self._dark_mode_text_factor))
+
+    @property
+    def _dark_mode_text_factor(self) -> float:
+        """
+        How far dark-mode text gets pushed toward white. Every Rider
+        uses the normal amount (0.35) EXCEPT Black, whose whole gimmick
+        (see Tier 1) is stricter, higher contrast in dark mode -- so its
+        words get pushed further toward pure white, standing out more
+        sharply against its own already-near-black primary color.
+        """
+        return 0.55 if self.tier1_effect == "high_contrast_dark" else 0.35
 
     @property
     def button_text_pair(self) -> tuple[str, str]:
@@ -150,35 +166,35 @@ class RiderTheme:
 
 
 RIDER_THEMES: dict[str, RiderTheme] = {
-    "Kamen Rider (1971)": RiderTheme("Showa", 1971, "#1b5e3a", "#c0392b"),
+    "Kamen Rider (1971)": RiderTheme("Showa", 1971, "#1b5e3a", "#c0392b", tier1_effect="windmill"),
     "Kamen Rider V3 (1973)": RiderTheme("Showa", 1973, "#2e7d32", "#c0392b"),
     "Kamen Rider X (1974)": RiderTheme("Showa", 1974, "#cfd8dc", "#1565c0"),
     "Kamen Rider Amazon (1974)": RiderTheme("Showa", 1974, "#33691e", "#e65100"),
-    "Kamen Rider Stronger (1975)": RiderTheme("Showa", 1975, "#c62828", "#212121"),
-    "Kamen Rider Skyrider (1979)": RiderTheme("Showa", 1979, "#2e7d32", "#8d6e63"),
+    "Kamen Rider Stronger (1975)": RiderTheme("Showa", 1975, "#c62828", "#212121", tier1_effect="border_glow"),
+    "Kamen Rider Skyrider (1979)": RiderTheme("Showa", 1979, "#2e7d32", "#8d6e63", tier1_effect="rising_bar"),
     "Kamen Rider Super-1 (1980)": RiderTheme("Showa", 1980, "#e0e0e0", "#212121"),
     "Kamen Rider ZX (1982)": RiderTheme("Showa", 1982, "#c62828", "#b0bec5"),
-    "Kamen Rider Black (1987)": RiderTheme("Showa", 1987, "#1a1a1a", "#00c853"),
+    "Kamen Rider Black (1987)": RiderTheme("Showa", 1987, "#1a1a1a", "#00c853", tier1_effect="high_contrast_dark"),
     "Kamen Rider Black RX (1988)": RiderTheme("Showa", 1988, "#2e7d32", "#1a1a1a"),
     "Kamen Rider Kuuga (2000)": RiderTheme("Heisei", 2000, "#c1272d", "#212121"),
-    "Kamen Rider Agito (2001)": RiderTheme("Heisei", 2001, "#ffca28", "#212121"),
+    "Kamen Rider Agito (2001)": RiderTheme("Heisei", 2001, "#ffca28", "#212121", tier1_effect="color_interpolation"),
     "Kamen Rider Ryuki (2002)": RiderTheme("Heisei", 2002, "#c62828", "#9e9e9e"),
     "Kamen Rider 555 (2003)": RiderTheme("Heisei", 2003, "#111111", "#d50000"),
     "Kamen Rider Blade (2004)": RiderTheme("Heisei", 2004, "#1565c0", "#b0bec5"),
     "Kamen Rider Hibiki (2005)": RiderTheme("Heisei", 2005, "#4a148c", "#c62828"),
     "Kamen Rider Kabuto (2006)": RiderTheme("Heisei", 2006, "#c62828", "#90a4ae"),
     "Kamen Rider Den-O (2007)": RiderTheme("Heisei", 2007, "#c62828", "#eceff1"),
-    "Kamen Rider Kiva (2008)": RiderTheme("Heisei", 2008, "#8e0000", "#ffca28"),
+    "Kamen Rider Kiva (2008)": RiderTheme("Heisei", 2008, "#8e0000", "#ffca28", tier1_effect="night_overlay"),
     "Kamen Rider Decade (2009)": RiderTheme("Heisei", 2009, "#d81b60", "#212121"),
     "Kamen Rider W (2009)": RiderTheme("Heisei", 2009, "#2e7d32", "#1a1a1a"),
     "Kamen Rider OOO (2010)": RiderTheme("Heisei", 2010, "#1a1a1a", "#c62828"),
-    "Kamen Rider Fourze (2011)": RiderTheme("Heisei", 2011, "#ffffff", "#ef6c00"),
+    "Kamen Rider Fourze (2011)": RiderTheme("Heisei", 2011, "#ffffff", "#ef6c00", tier1_effect="constellation"),
     "Kamen Rider Wizard (2012)": RiderTheme("Heisei", 2012, "#c62828", "#212121"),
     "Kamen Rider Gaim (2013)": RiderTheme("Heisei", 2013, "#ef6c00", "#c9a227"),
-    "Kamen Rider Drive (2014)": RiderTheme("Heisei", 2014, "#c62828", "#212121"),
+    "Kamen Rider Drive (2014)": RiderTheme("Heisei", 2014, "#c62828", "#212121", tier1_effect="accelerating_fill"),
     "Kamen Rider Ghost (2015)": RiderTheme("Heisei", 2015, "#1a1a1a", "#ff9800"),
     "Kamen Rider Ex-Aid (2016)": RiderTheme("Heisei", 2016, "#e91e63", "#00e676"),
-    "Kamen Rider Build (2017)": RiderTheme("Heisei", 2017, "#c62828", "#1565c0"),
+    "Kamen Rider Build (2017)": RiderTheme("Heisei", 2017, "#c62828", "#1565c0", tier1_effect="vials"),
     "Kamen Rider Zi-O (2018)": RiderTheme("Heisei", 2018, "#212121", "#d81b60"),
     "Kamen Rider Zero-One (2019)": RiderTheme("Reiwa", 2019, "#aeea00", "#1a1a1a"),
     "Kamen Rider Saber (2020)": RiderTheme("Reiwa", 2020, "#c62828", "#212121"),
