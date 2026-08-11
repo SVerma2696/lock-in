@@ -1,0 +1,18 @@
+# This file tells GitHub's robot helper (Dependabot) to check for
+# outdated or unsafe versions of the tools this project uses, and to
+# open a pull request by itself when it finds one to update.
+version: 2
+
+updates:
+  # Checks the Python packages in requirements.txt.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Checks the GitHub Actions used in .github/workflows (tests, release,
+  # code scanning) — these can go out of date too, same as any package.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

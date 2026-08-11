@@ -764,6 +764,13 @@ project's author.
 
 ---
 
+## Security
+
+Found a security issue? Please don't open a public issue for it — see
+[SECURITY.md](SECURITY.md) for how to report it privately.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
