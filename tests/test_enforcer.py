@@ -181,6 +181,16 @@ def test_first_strike_after_grace_is_a_warning(enforcer, clock):
     assert enforcer.update(blocked_verdict(), w) is Action.WARN
 
 
+def test_zero_grace_mode_skips_the_grace_period_entirely(config, clock):
+    config.zero_grace_mode = True
+    e = Enforcer(config, clock=clock)
+    w = win("discord.exe", "chat")
+    # Normally the very first check would return Action.NONE (still
+    # inside the grace period, see test_grace_period_stays_silent) --
+    # zero_grace_mode should skip straight to a real strike instead.
+    assert e.update(blocked_verdict(), w) is not Action.NONE
+
+
 def test_full_ladder_in_hard_mode(config, clock):
     """Hard mode skips the warnings entirely and acts right away."""
     config.hard_mode = True

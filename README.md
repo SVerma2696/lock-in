@@ -440,6 +440,29 @@ See `docs/superpowers/specs/2026-08-10-tier2-settings-presets-design.md`
 for the full design, and `docs/superpowers/plans/2026-08-10-tier2-settings-presets.md`
 for the implementation plan.
 
+### Tier 3: 5 Riders with enforcement/interaction tweaks
+
+Five more Riders change actual behavior, not just looks:
+
+- **X** — before a fresh focus block can start, a full-screen prompt
+  asks what you're working on. No timeout — type when you're ready.
+  Your answer replaces the Rider-name label for that block.
+- **Amazon** — during a focus block, the whole UI strips down to a
+  solid draining green field (Pause/Skip/Reset shrink to icons instead
+  of disappearing), and the grace period drops to 0 seconds.
+- **ZX** — the whole app renders in monochrome for as long as ZX is
+  selected, and auto-minimizes the moment a focus block starts, with
+  Sounds and Desktop notifications silenced for that block.
+- **Gaim** — during a focus block, the window stays always-on-top, the
+  background dims, and a padlock appears — a strong visual deterrent,
+  never a real block on switching windows.
+- **555** — the existing Lockdown screen gets a second way out: type
+  `555` to skip the rest of the countdown and return to work early.
+
+See `docs/superpowers/specs/2026-08-11-tier3-enforcement-interaction-design.md`
+for the full design, and `docs/superpowers/plans/2026-08-11-tier3-enforcement-interaction.md`
+for the implementation plan.
+
 ### Look and feel
 
 `lock_in/visuals.py` generates the app's art at runtime with Pillow, tinted

@@ -385,3 +385,71 @@ def test_apply_tier1_background_effect_none_returns_base_unchanged():
     base = Image.new("RGB", (100, 100), (20, 20, 20))
     result = visuals.apply_tier1_background_effect(base, "none", "#c62828")
     assert result.tobytes() == base.convert("RGBA").tobytes()
+
+
+# ===================================================================== #
+# Tier 3: enforcement/interaction tweaks
+# See docs/superpowers/specs/2026-08-11-tier3-enforcement-interaction-design.md
+# ===================================================================== #
+
+def test_render_padlock_glyph_returns_a_square_image():
+    from lock_in.visuals import render_padlock_glyph
+    image = render_padlock_glyph(60)
+    assert image.size == (60, 60)
+    assert image.mode == "RGBA"
+
+
+def test_apply_gaim_lock_overlay_inactive_returns_base_unchanged():
+    from lock_in.visuals import apply_gaim_lock_overlay
+    from PIL import Image
+    base = Image.new("RGB", (100, 100), (20, 20, 20))
+    result = apply_gaim_lock_overlay(base, active=False)
+    assert result.tobytes() == base.convert("RGBA").tobytes()
+
+
+def test_apply_gaim_lock_overlay_active_dims_the_picture():
+    from lock_in.visuals import apply_gaim_lock_overlay
+    from PIL import Image
+    base = Image.new("RGB", (100, 100), (200, 200, 200))
+    result = apply_gaim_lock_overlay(base, active=True)
+    # A corner far from the centered padlock should just be dimmed,
+    # not covered by the glyph -- confirms the dim wash covers the
+    # whole picture, not just a patch.
+    corner = result.getpixel((2, 2))
+    assert corner[:3] != (200, 200, 200)
+    assert sum(corner[:3]) < sum((200, 200, 200))
+
+
+def test_apply_gaim_lock_overlay_active_returns_same_size():
+    from lock_in.visuals import apply_gaim_lock_overlay
+    from PIL import Image
+    base = Image.new("RGB", (120, 80), (50, 50, 50))
+    result = apply_gaim_lock_overlay(base, active=True)
+    assert result.size == (120, 80)
+
+
+def test_render_amazon_drain_returns_the_requested_size():
+    from lock_in.visuals import render_amazon_drain
+    image = render_amazon_drain(200, 80, 0.5)
+    assert image.size == (200, 80)
+    assert image.mode == "RGBA"
+
+
+def test_render_amazon_drain_shrinks_as_progress_increases():
+    """The field DRAINS -- less of it is filled as the block finishes,
+    not more (opposite direction from a normal progress bar)."""
+    from lock_in.visuals import render_amazon_drain
+
+    early = render_amazon_drain(200, 80, 0.1)
+    late = render_amazon_drain(200, 80, 0.9)
+    assert _alpha_sum(early) > _alpha_sum(late)
+
+
+def test_render_amazon_drain_is_always_the_same_amazon_green():
+    """No primary/secondary color parameter on purpose -- the spec is a
+    literal fixed #33691e, not derived from whichever Rider is picked."""
+    from lock_in.visuals import render_amazon_drain
+    image = render_amazon_drain(200, 80, 0.0)
+    # top-left pixel should be fully the Amazon green, fully opaque
+    pixel = image.getpixel((0, 0))
+    assert pixel == (51, 105, 30, 235)   # 0x33, 0x69, 0x1e

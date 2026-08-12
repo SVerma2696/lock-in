@@ -69,3 +69,16 @@ def test_eras_sound_different_from_each_other():
 
 def test_default_era_is_heisei():
     assert DEFAULT_ERA == "Heisei"
+
+
+def test_stealth_mute_mode_silences_sound_and_toast_checks():
+    """
+    notify()/phase_chime()/alert_sound() all gate on
+    effective_sound_enabled()/effective_toast_enabled() now, not the
+    raw sound_enabled/toast_enabled fields -- this confirms those
+    methods themselves report muted when ZX's stealth mode is on, which
+    is the actual switch Notifier's real code reads.
+    """
+    config = Config(sound_enabled=True, toast_enabled=True, stealth_mute_mode=True)
+    assert config.effective_sound_enabled() is False
+    assert config.effective_toast_enabled() is False

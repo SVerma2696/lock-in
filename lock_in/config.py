@@ -130,6 +130,14 @@ class Config:
     # GAVV_MICRO_SPRINT's short values instead of the 4 lines above --
     # your real numbers are never overwritten, just temporarily ignored.
     micro_sprint_mode: bool = False
+    # Amazon's zero-UI gimmick: while this is on, effective_grace_seconds()
+    # below hands back 0 instead of your real grace_seconds -- same
+    # read-only trick as micro_sprint_mode, your real number is untouched.
+    zero_grace_mode: bool = False
+    # ZX's stealth gimmick: while this is on, effective_sound_enabled()
+    # and effective_toast_enabled() below both hand back False, no
+    # matter what your real Sounds/Desktop notifications switches say.
+    stealth_mute_mode: bool = False
 
     # --- What happens automatically ----------------------------------------- #
     auto_start_breaks: bool = True        # break starts right away
@@ -237,3 +245,15 @@ class Config:
             "short_break": self.short_break_minutes * 60,
             "long_break": self.long_break_minutes * 60,
         }[phase_name]
+
+    def effective_grace_seconds(self) -> int:
+        """Amazon's zero_grace_mode override -- see the field comment above."""
+        return 0 if self.zero_grace_mode else self.grace_seconds
+
+    def effective_sound_enabled(self) -> bool:
+        """ZX's stealth_mute_mode override -- see the field comment above."""
+        return False if self.stealth_mute_mode else self.sound_enabled
+
+    def effective_toast_enabled(self) -> bool:
+        """The same idea as effective_sound_enabled, for Desktop notifications."""
+        return False if self.stealth_mute_mode else self.toast_enabled

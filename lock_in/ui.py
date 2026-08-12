@@ -23,12 +23,13 @@ What the window looks like
     │  ▓▓▓▓▓░░░░░░░░░░░░            │
     │  [Start] [Skip] [Reset]       │
     ├───────────────────────────────┤
-    │ Timer │ Blocking │ Activity │ Settings │
+    │ Timer │ Blocking │ Activity │ Settings │ Help │
     └───────────────────────────────┘
 """
 
 from __future__ import annotations
 
+import dataclasses
 import queue
 import sys
 import time
@@ -47,9 +48,10 @@ from .monitor import BACKEND_AVAILABLE, ActiveWindowMonitor, minimize_window
 from .notifier import Notifier
 from .session import Event, Phase, PomodoroSession, label_for
 from .presets import GAVV_MICRO_SPRINT, KUUGA_PRESETS, SUPER1_PRESETS, TimerPreset
-from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES
+from .rider_themes import DEFAULT_RIDER_THEME, RIDER_THEMES, desaturate
 from .visuals import (
     SHAPE_EFFECTS,
+    apply_gaim_lock_overlay,
     apply_tier1_background_effect,
     display_font_family,
     ease_drive_progress,
@@ -58,6 +60,7 @@ from .visuals import (
     make_background_texture,
     make_glow,
     make_panel_divider,
+    render_amazon_drain,
     render_progress,
 )
 
@@ -104,6 +107,11 @@ DIVIDER_HEIGHT = 14
 PROGRESS_SHAPE_WIDTH = 340
 PROGRESS_SHAPE_HEIGHT = 48
 
+# Amazon's zero-UI picture is bigger than the other progress pictures
+# on purpose -- it's meant to dominate the header, not sit in a thin strip.
+ZERO_UI_WIDTH = 340
+ZERO_UI_HEIGHT = 120
+
 
 class LockInApp(ctk.CTk):
     """The main app window — everything you see lives inside this."""
@@ -121,6 +129,10 @@ class LockInApp(ctk.CTk):
         # Stronger/Kiva's Tier 1 background effect).
         self.session = PomodoroSession(self.config_obj)
         self._apply_rider_theme()
+        # X's goal-entry gate stores what you typed here -- in-memory
+        # only, same rule as Fourze's constellation state: it resets
+        # every time the app restarts, no save file needed.
+        self.current_goal_text = ""
         self.model = NaiveBayesClassifier.load(MODEL_PATH)
         self.observations = ObservationStore(OBSERVATIONS_PATH)
         self.claude = ClaudeFallback(self.config_obj)
@@ -245,6 +257,18 @@ class LockInApp(ctk.CTk):
         theme = RIDER_THEMES.get(
             self.config_obj.rider_theme, RIDER_THEMES[DEFAULT_RIDER_THEME]
         )
+        # ZX's whole gimmick is going monochrome. Swapping in a
+        # desaturated copy of the theme HERE, before anything below
+        # reads theme.primary_pair/surface_pair/etc, means every one of
+        # those (which all derive from primary/secondary) comes out
+        # grey automatically -- no separate grayscale step needed
+        # anywhere else, for widgets OR the Pillow-rendered art.
+        if theme.tier3_effect == "stealth_mute":
+            theme = dataclasses.replace(
+                theme,
+                primary=(desaturate(theme.primary[0]), desaturate(theme.primary[1])),
+                secondary=(desaturate(theme.secondary[0]), desaturate(theme.secondary[1])),
+            )
         self.color_focus = theme.primary_pair
         self.color_rider_accent = theme.secondary_pair
         # A panel-background color tinted by the Rider's primary color —
@@ -277,6 +301,10 @@ class LockInApp(ctk.CTk):
         # (not the text/surface pairs above -- Agito's color shift and
         # Stronger's glow both work from the Rider's real colors).
         self.current_tier1_effect = theme.tier1_effect
+        # Which Tier 3 gimmick (if any) this Rider has -- read by the
+        # goal-gate, zero-UI, lock-overlay, and code-unlock code later
+        # in this file.
+        self.current_tier3_effect = theme.tier3_effect
         self.rider_primary_pair = theme.primary
         self.rider_secondary_pair = theme.secondary
         # Stronger's glow uses the Rider's own primary (already a red);
@@ -357,6 +385,11 @@ class LockInApp(ctk.CTk):
         bg_dark = apply_tier1_background_effect(
             self._base_bg_dark, active_effect, effect_color_dark, progress_fraction,
         )
+
+        if self.current_tier3_effect == "lock_overlay":
+            bg_light = apply_gaim_lock_overlay(bg_light, in_focus)
+            bg_dark = apply_gaim_lock_overlay(bg_dark, in_focus)
+
         self._bg_image.configure(light_image=bg_light, dark_image=bg_dark)
 
     def _on_window_resized(self, event) -> None:
@@ -427,26 +460,35 @@ class LockInApp(ctk.CTk):
         self._timer_glow_label = ctk.CTkLabel(header, text="", image=self._timer_glow_image)
         self._timer_glow_label.place(relx=0.5, rely=0.33, anchor="center")
 
+        # Wrapped in one frame so Amazon's zero-UI mode can hide all 4
+        # of these at once, safely, instead of hiding and restoring
+        # each one individually. Not packed here -- self.controls
+        # doesn't exist yet at this point in the method, so packing
+        # happens a little further down, right after self.controls is
+        # created.
+        self.normal_header_content = ctk.CTkFrame(header, fg_color="transparent")
+
         self.phase_label = ctk.CTkLabel(
-            header, text="Standing By",
+            self.normal_header_content, text="Standing By",
             font=ctk.CTkFont(family=DISPLAY_FONT, size=16, weight="bold"),
             text_color=COLOR_IDLE,
         )
         self.phase_label.pack(pady=(4, 0))
 
         self.time_label = ctk.CTkLabel(
-            header, text="25:00", font=ctk.CTkFont(family=DISPLAY_FONT, size=76, weight="bold"),
+            self.normal_header_content, text="25:00",
+            font=ctk.CTkFont(family=DISPLAY_FONT, size=76, weight="bold"),
         )
         self.time_label.pack(pady=(0, 4))
 
         self.streak_label = ctk.CTkLabel(
-            header, text="0 blocks done", font=ctk.CTkFont(size=12),
+            self.normal_header_content, text="0 blocks done", font=ctk.CTkFont(size=12),
             text_color=COLOR_IDLE,
         )
         self.streak_label.pack()
 
         self.driver_label = ctk.CTkLabel(
-            header, text=self.config_obj.rider_theme.upper(),
+            self.normal_header_content, text=self.config_obj.rider_theme.upper(),
             font=ctk.CTkFont(family=DISPLAY_FONT, size=10, weight="bold"),
             text_color=self.color_driver_text,
         )
@@ -463,8 +505,18 @@ class LockInApp(ctk.CTk):
         # keeps working exactly like it always has.
         self.progress_shape = ctk.CTkLabel(header, text="", image=None)
 
+        # Amazon's "zero UI" picture -- only shown instead of everything
+        # else in the header, and only during an actual focus block
+        # (see _sync_zero_ui_visibility). Not packed yet on purpose.
+        self.zero_ui_label = ctk.CTkLabel(header, text="", image=None)
+
         self.controls = ctk.CTkFrame(header, fg_color="transparent")
         self.controls.pack()
+        # normal_header_content was created earlier in this method (before
+        # the progress bar), but wasn't packed yet until now -- pack() needs
+        # self.controls to already be managed for `before=` to place it
+        # correctly, right where it visually belongs: above the progress bar.
+        self.normal_header_content.pack(before=self.progress)
         controls = self.controls
 
         # Same trick as the timer glow: made first, so it sits behind the
@@ -479,17 +531,23 @@ class LockInApp(ctk.CTk):
         )
         self.start_button.grid(row=0, column=0, padx=6)
 
-        ctk.CTkButton(controls, text="Skip", width=80, height=40,
-                      fg_color="transparent", border_width=2,
-                      border_color=COLOR_TIMER_ACCENT, text_color=COLOR_TIMER_ACCENT,
-                      hover_color=("#d0ebff", "#173a5e"),
-                      command=self._on_skip).grid(row=0, column=1, padx=6)
+        self.skip_button = ctk.CTkButton(
+            controls, text="Skip", width=80, height=40,
+            fg_color="transparent", border_width=2,
+            border_color=COLOR_TIMER_ACCENT, text_color=COLOR_TIMER_ACCENT,
+            hover_color=("#d0ebff", "#173a5e"),
+            command=self._on_skip,
+        )
+        self.skip_button.grid(row=0, column=1, padx=6)
 
-        ctk.CTkButton(controls, text="Reset", width=80, height=40,
-                      fg_color="transparent", border_width=2,
-                      border_color=COLOR_ENFORCE_ACCENT, text_color=COLOR_ENFORCE_ACCENT,
-                      hover_color=("#ffe3e3", "#4a1414"),
-                      command=self._on_reset).grid(row=0, column=2, padx=6)
+        self.reset_button = ctk.CTkButton(
+            controls, text="Reset", width=80, height=40,
+            fg_color="transparent", border_width=2,
+            border_color=COLOR_ENFORCE_ACCENT, text_color=COLOR_ENFORCE_ACCENT,
+            hover_color=("#ffe3e3", "#4a1414"),
+            command=self._on_reset,
+        )
+        self.reset_button.grid(row=0, column=2, padx=6)
 
         # Shows, live, what window we currently think you're looking at.
         self.watch_label = ctk.CTkLabel(
@@ -517,12 +575,13 @@ class LockInApp(ctk.CTk):
         )
         self.tabs.pack(fill="both", expand=True, padx=20, pady=(0, 16))
 
-        for name in ("Blocking", "Activity", "Settings"):
+        for name in ("Blocking", "Activity", "Settings", "Help"):
             self.tabs.add(name)
 
         self._build_blocking_tab(self.tabs.tab("Blocking"))
         self._build_activity_tab(self.tabs.tab("Activity"))
         self._build_settings_tab(self.tabs.tab("Settings"))
+        self._build_help_tab(self.tabs.tab("Help"))
 
     # ------------------------------------------------------------------ #
     def _build_blocking_tab(self, parent) -> None:
@@ -622,6 +681,38 @@ class LockInApp(ctk.CTk):
         )
         self.activity_empty.pack(anchor="w", pady=20)
         self._update_model_stats()
+
+    # ------------------------------------------------------------------ #
+    def _build_help_tab(self, parent) -> None:
+        """A short, plain-language "how do I use this thing" guide."""
+        frame = ctk.CTkScrollableFrame(parent, fg_color="transparent")
+        frame.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(
+            frame, text="How to use Lock In", text_color=COLOR_LOOK_ACCENT,
+            font=ctk.CTkFont(size=15, weight="bold"),
+        ).pack(anchor="w", pady=(0, 10))
+
+        start_word = self._henshin_word()
+        steps = [
+            "Set how long a focus block and break should last, in the "
+            "Settings tab (\"Timer lengths\").",
+            "In the Blocking tab, add apps that distract you to the block "
+            "list, and apps you trust to the allow list.",
+            f'Press "{start_word}" to begin a focus block.',
+            "Stay off blocked apps during a focus block — opening one "
+            "warns you, then gets stricter the longer you stay.",
+            "After a block, check the Activity tab and correct anything "
+            "the app got wrong — it learns from every correction.",
+            "Pick a Kamen Rider color theme in Settings if you like, "
+            "purely for looks — or switch Wording to Professional if "
+            "you'd rather skip the tokusatsu theme entirely.",
+        ]
+        for i, step in enumerate(steps, start=1):
+            ctk.CTkLabel(
+                frame, text=f"{i}. {step}", justify="left", wraplength=460,
+                anchor="w",
+            ).pack(anchor="w", pady=6, fill="x")
 
     # ------------------------------------------------------------------ #
     def _build_settings_tab(self, parent) -> None:
@@ -948,6 +1039,23 @@ class LockInApp(ctk.CTk):
                                  text_color="#6b7480")
         countdown.pack(pady=26)
 
+        if self.current_tier3_effect == "code_unlock":
+            code_entry = ctk.CTkEntry(overlay, width=140, justify="center",
+                                       font=ctk.CTkFont(size=16))
+            code_entry.pack(pady=(4, 4))
+            code_hint = ctk.CTkLabel(overlay, text="Enter code to unlock early",
+                                      font=ctk.CTkFont(size=11), text_color="#6b7480")
+            code_hint.pack(pady=(0, 12))
+
+            def check_code(event=None) -> None:
+                if code_entry.get().strip() == "555":
+                    self._close_lockdown()
+                else:
+                    code_entry.delete(0, "end")
+                    code_hint.configure(text="Incorrect code", text_color=COLOR_DANGER)
+
+            code_entry.bind("<Return>", check_code)
+
         end_button_text = "Abort Mission" if self._is_tokusatsu() else "End Session"
         ctk.CTkButton(overlay, text=end_button_text, width=200,
                       fg_color="transparent", border_width=1,
@@ -994,6 +1102,25 @@ class LockInApp(ctk.CTk):
         self.enforcer.reset()
         phase = self.session.phase
 
+        if phase is Phase.FOCUS and self.current_tier3_effect == "stealth_mute":
+            # Ninja Stealth: get out of the way the moment focus starts.
+            # iconify() is Tkinter's own cross-platform minimize -- no
+            # need for the OS-specific minimize_window() helper, since
+            # that one is built for minimizing OTHER apps' windows, not
+            # this app's own.
+            self.iconify()
+
+        if self.current_tier3_effect == "lock_overlay":
+            # Locks the window in front of everything else for the
+            # whole block, then lets go the moment it's not FOCUS
+            # anymore -- never a permanent always-on-top, just for the
+            # duration of the lock.
+            self.attributes("-topmost", phase is Phase.FOCUS)
+
+        if self.current_tier3_effect == "zero_ui":
+            self._sync_zero_ui_visibility()
+            self.config_obj.zero_grace_mode = phase is Phase.FOCUS
+
         if phase is Phase.FOCUS and self.session.is_running:
             self.monitor.resume()
         else:
@@ -1016,6 +1143,11 @@ class LockInApp(ctk.CTk):
     def _on_phase_ended(self) -> None:
         self.monitor.pause()
         self._close_lockdown()
+        if self.current_tier3_effect == "lock_overlay":
+            self.attributes("-topmost", False)
+        if self.current_tier3_effect == "zero_ui":
+            self._sync_zero_ui_visibility()
+            self.config_obj.zero_grace_mode = False
         # Saving right when a phase ends is a natural, safe checkpoint — if
         # the app were to crash, you'd only lose at most one block's worth
         # of training data, never more.
@@ -1025,6 +1157,16 @@ class LockInApp(ctk.CTk):
     # What happens when you click a button
     # ================================================================== #
     def _on_toggle(self) -> None:
+        # X's gimmick: starting fresh (not resuming from pause) needs a
+        # goal typed in first. Resuming never shows the gate again --
+        # only self.session.phase is Phase.IDLE catches "about to
+        # start a brand new block."
+        if self.current_tier3_effect == "goal_gate" and self.session.phase is Phase.IDLE:
+            self._show_goal_gate()
+            return
+        self._do_toggle()
+
+    def _do_toggle(self) -> None:
         was_running = self.session.is_running
         for event in self.session.toggle():
             if event is Event.PHASE_STARTED:
@@ -1039,6 +1181,48 @@ class LockInApp(ctk.CTk):
             self.monitor.pause()
 
         self._refresh_timer_widgets()
+
+    def _show_goal_gate(self) -> None:
+        """
+        X's gimmick: before you can even start, you have to say what
+        you're working on. Mirrors _show_lockdown()'s full-screen
+        overlay trick, but this one asks a question instead of
+        enforcing a wait -- no countdown, no timeout, just a text box.
+        """
+        overlay = ctk.CTkToplevel(self)
+        overlay.attributes("-topmost", True)
+        try:
+            overlay.attributes("-fullscreen", True)
+        except Exception:
+            overlay.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0")
+        overlay.configure(fg_color="#121417")
+        overlay.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        title = "DEEP SETUP" if self._is_tokusatsu() else "Set your goal"
+        ctk.CTkLabel(overlay, text=title, font=ctk.CTkFont(size=40, weight="bold"),
+                     text_color=self.color_lockdown_text).pack(pady=(220, 20))
+        ctk.CTkLabel(overlay, text="What are you working on this block?",
+                     font=ctk.CTkFont(size=16), text_color="#9aa4b2").pack(pady=(0, 16))
+
+        entry = ctk.CTkEntry(overlay, width=420, height=44, font=ctk.CTkFont(size=15))
+        entry.pack(pady=(0, 8))
+        entry.focus_set()
+
+        hint = ctk.CTkLabel(overlay, text="", font=ctk.CTkFont(size=12), text_color=COLOR_DANGER)
+        hint.pack()
+
+        def submit(event=None) -> None:
+            text = entry.get().strip()
+            if not text:
+                hint.configure(text="Type something before you begin.")
+                return
+            self.current_goal_text = text
+            overlay.destroy()
+            self._do_toggle()
+
+        entry.bind("<Return>", submit)
+        begin_word = "Begin" if self._is_tokusatsu() else "Start"
+        ctk.CTkButton(overlay, text=begin_word, width=200, command=submit).pack(pady=20)
 
     def _on_skip(self) -> None:
         for event in self.session.skip():
@@ -1079,6 +1263,13 @@ class LockInApp(ctk.CTk):
         # accent — same trick already used when you switch appearance
         # mode, just triggered by a Rider change instead.
         self._rebuild_tabs()
+        # Switching AWAY from Amazon mid-focus-block would otherwise
+        # leave the header stuck hidden under the new Rider (nothing
+        # else re-shows it); switching TO Amazon mid-focus-block should
+        # hide it right away instead of waiting for the next tick. Safe
+        # to call for every other Rider too -- it's a no-op unless
+        # current_tier3_effect is "zero_ui".
+        self._sync_zero_ui_visibility()
 
     def _on_terminology_switch_toggled(self) -> None:
         """Called when you click the Wording switch itself."""
@@ -1448,6 +1639,11 @@ class LockInApp(ctk.CTk):
         label = label_for(phase, self.config_obj.terminology)
         progress_fraction = self.session.progress
 
+        driver_text = self.config_obj.rider_theme.upper()
+        if phase is Phase.FOCUS and self.current_tier3_effect == "goal_gate" and self.current_goal_text:
+            driver_text = self.current_goal_text.upper()
+        self.driver_label.configure(text=driver_text)
+
         self.time_label.configure(text=self.session.format_remaining())
 
         # The progress bar's fill uses the plain, vivid Rider color — but
@@ -1494,10 +1690,17 @@ class LockInApp(ctk.CTk):
             self.progress.set(progress_fraction)
             self.progress.configure(progress_color=fill_color)
 
-        if self.current_tier1_effect in ("border_glow", "night_overlay"):
+        if self.current_tier1_effect in ("border_glow", "night_overlay") or self.current_tier3_effect == "lock_overlay":
             self._refresh_background_effect(progress_fraction)
 
-        self.start_button.configure(text="Pause" if self.session.is_running else self._henshin_word())
+        if self.current_tier3_effect == "zero_ui" and phase is Phase.FOCUS:
+            self._refresh_zero_ui_drain(progress_fraction)
+            # Icon-only text still needs to track paused/running, just
+            # like the normal button text below does -- it's just a
+            # different label for the same two states.
+            self.start_button.configure(text="⏸" if self.session.is_running else "▶")
+        else:
+            self.start_button.configure(text="Pause" if self.session.is_running else self._henshin_word())
 
         done = self.session.completed_focus_blocks
         until_long = self.session.blocks_until_long_break
@@ -1553,6 +1756,64 @@ class LockInApp(ctk.CTk):
         else:
             self.progress_shape.pack_forget()
             self.progress.pack(fill="x", pady=(12, 14), before=self.controls)
+
+    def _sync_zero_ui_visibility(self) -> None:
+        """
+        Amazon's "zero UI" look replaces the normal timer words and
+        progress bar with just a draining color field, and shrinks the
+        buttons to icons -- but ONLY during an actual focus block. Any
+        other time (break, idle, or before you've even started) you
+        see the normal UI, same as every other Rider.
+        """
+        active = (
+            self.current_tier3_effect == "zero_ui"
+            and self.session.phase is Phase.FOCUS
+        )
+
+        if active:
+            self.normal_header_content.pack_forget()
+            self.progress.pack_forget()
+            self.progress_shape.pack_forget()
+            self._timer_glow_label.place_forget()
+            self.tabs.pack_forget()
+            self.zero_ui_label.pack(pady=(20, 20), before=self.controls)
+            self.start_button.configure(text="⏸" if self.session.is_running else "▶", width=44)
+            self.skip_button.configure(text="⏭", width=44)
+            self.reset_button.configure(text="⟲", width=44)
+        else:
+            self.zero_ui_label.pack_forget()
+            if not self.normal_header_content.winfo_ismapped():
+                # self.progress may currently be unpacked too (zero-UI
+                # hides it along with everything else), so anchoring on
+                # self.controls -- which is never toggled, always
+                # packed -- is the only always-safe target here. Packing
+                # normal_header_content before controls FIRST, then
+                # letting _sync_progress_widget_visibility() pack the
+                # progress widget before controls too, naturally stacks
+                # them in the right order: content, then progress, then
+                # controls.
+                self.normal_header_content.pack(before=self.controls)
+                self._timer_glow_label.place(relx=0.5, rely=0.33, anchor="center")
+                self.tabs.pack(fill="both", expand=True, padx=20, pady=(0, 16), after=self._divider_label)
+                self._sync_progress_widget_visibility()
+                self.start_button.configure(
+                    text="Pause" if self.session.is_running else self._henshin_word(), width=140,
+                )
+                self.skip_button.configure(text="Skip", width=80)
+                self.reset_button.configure(text="Reset", width=80)
+
+    def _refresh_zero_ui_drain(self, progress_fraction: float) -> None:
+        """Redraw Amazon's draining field and push it onto the label already
+        on screen -- same light/dark-both-the-same trick as the button glow,
+        since this picture's color never depends on appearance mode."""
+        drain = render_amazon_drain(ZERO_UI_WIDTH, ZERO_UI_HEIGHT, progress_fraction)
+        if hasattr(self, "_zero_ui_image"):
+            self._zero_ui_image.configure(light_image=drain, dark_image=drain)
+        else:
+            self._zero_ui_image = ctk.CTkImage(
+                light_image=drain, dark_image=drain, size=(ZERO_UI_WIDTH, ZERO_UI_HEIGHT),
+            )
+            self.zero_ui_label.configure(image=self._zero_ui_image)
 
     def _update_watch_label(self, window: WindowInfo) -> None:
         if self.session.phase is Phase.FOCUS and self.monitor.is_active:

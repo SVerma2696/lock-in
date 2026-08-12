@@ -283,7 +283,7 @@ class Enforcer:
         elapsed = now - (self._blocked_since or now)
 
         # A short grace period — you might really be about to close it.
-        if elapsed < self.config.grace_seconds:
+        if elapsed < self.config.effective_grace_seconds():
             return Action.NONE
 
         # Don't step things up more than once per interval, even if we check every second.

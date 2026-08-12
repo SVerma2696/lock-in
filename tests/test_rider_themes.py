@@ -164,6 +164,51 @@ def test_black_light_mode_text_is_unaffected():
     assert black.secondary_text_pair[0] == darken(black.secondary[0], 0.35)
 
 
+def test_desaturate_produces_equal_rgb_channels():
+    from lock_in.rider_themes import desaturate
+    gray = desaturate("#ff0000").lstrip("#")
+    r, g, b = gray[0:2], gray[2:4], gray[4:6]
+    assert r == g == b
+
+
+def test_desaturate_preserves_relative_brightness():
+    from lock_in.rider_themes import desaturate
+
+    def brightness(hex_color):
+        hex_color = hex_color.lstrip("#")
+        return sum(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+    bright = desaturate("#ffff00")   # yellow -- perceived as bright
+    dark = desaturate("#000080")     # navy -- perceived as dark
+    assert brightness(bright) > brightness(dark)
+
+
+def test_desaturate_keeps_two_different_colors_visually_distinct():
+    from lock_in.rider_themes import desaturate
+    assert desaturate("#ff0000") != desaturate("#0000ff")
+
+
+def test_tier3_effect_defaults_to_none_for_ordinary_riders():
+    assert RIDER_THEMES["Kamen Rider V3 (1973)"].tier3_effect == "none"
+    assert RIDER_THEMES["Kamen Rider Kuuga (2000)"].tier3_effect == "none"
+
+
+def test_tier3_effect_is_assigned_to_exactly_the_5_named_riders():
+    expected = {
+        "Kamen Rider X (1974)": "goal_gate",
+        "Kamen Rider Amazon (1974)": "zero_ui",
+        "Kamen Rider ZX (1982)": "stealth_mute",
+        "Kamen Rider Gaim (2013)": "lock_overlay",
+        "Kamen Rider 555 (2003)": "code_unlock",
+    }
+    for name, effect in expected.items():
+        assert RIDER_THEMES[name].tier3_effect == effect, name
+
+    everyone_else = set(RIDER_THEMES) - set(expected)
+    for name in everyone_else:
+        assert RIDER_THEMES[name].tier3_effect == "none", name
+
+
 def test_button_text_pair_is_readable_against_the_secondary_fill_both_modes():
     """The Henshin button's own text sits directly on secondary_pair --
     it needs to contrast against THAT color, not a tinted version of it."""

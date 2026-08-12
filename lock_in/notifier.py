@@ -160,15 +160,15 @@ class Notifier:
             except Exception:
                 pass
 
-        if urgency != "low" and self.config.toast_enabled:
+        if urgency != "low" and self.config.effective_toast_enabled():
             self._toast(title, body, urgency)
 
-        if urgency == "high" and self.config.sound_enabled:
+        if urgency == "high" and self.config.effective_sound_enabled():
             self.alert_sound()
 
     def phase_chime(self, starting_phase_label: str) -> None:
         """A soft, friendly chime when a new phase (focus or break) starts."""
-        if not self.config.sound_enabled:
+        if not self.config.effective_sound_enabled():
             return
         era = self._era()
         if IS_WINDOWS and _winsound is not None:
@@ -182,7 +182,7 @@ class Notifier:
 
     def alert_sound(self) -> None:
         """A sharper sound for when you need a nudge back to work."""
-        if not self.config.sound_enabled:
+        if not self.config.effective_sound_enabled():
             return
         era = self._era()
         if IS_WINDOWS and _winsound is not None:

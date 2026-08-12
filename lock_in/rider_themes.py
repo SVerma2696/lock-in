@@ -78,6 +78,22 @@ def readable_text_color(hex_color: str) -> str:
     return "#000000" if perceived_brightness > 150 else "#ffffff"
 
 
+def desaturate(hex_color: str) -> str:
+    """
+    Turn a color into its plain grey equivalent -- same perceived
+    brightness as the original, but with all the color washed out.
+
+    Uses the same "how bright does this look to a person" weights as
+    readable_text_color() (green looks brighter than blue at the same
+    number), so two different colors still end up as two different
+    greys instead of collapsing to the exact same grey.
+    """
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    gray = round((r * 299 + g * 587 + b * 114) / 1000)
+    return f"#{gray:02x}{gray:02x}{gray:02x}"
+
+
 @dataclass(frozen=True)
 class RiderTheme:
     """One Rider's two colors, plus which era and year they're from."""
@@ -93,6 +109,11 @@ class RiderTheme:
     # visuals.py and ui.py read this to decide what the progress bar or
     # background should look like for this Rider.
     tier1_effect: str = "none"
+    # "none" for every Rider except the 5 with a Tier 3 gimmick (see
+    # docs/superpowers/specs/2026-08-11-tier3-enforcement-interaction-design.md).
+    # ui.py reads this to decide what enforcement/interaction behavior
+    # this Rider needs.
+    tier3_effect: str = "none"
 
     @property
     def primary_pair(self) -> tuple[str, str]:
@@ -185,9 +206,11 @@ RIDER_THEMES: dict[str, RiderTheme] = {
     ),
     "Kamen Rider X (1974)": RiderTheme(
         "Showa", 1974, ("#90a4ae", "#cfd8dc"), ("#0f4a8f", "#42a5f5"),
+        tier3_effect="goal_gate",
     ),
     "Kamen Rider Amazon (1974)": RiderTheme(
         "Showa", 1974, ("#224714", "#558b2f"), ("#b33f00", "#ff9800"),
+        tier3_effect="zero_ui",
     ),
     "Kamen Rider Stronger (1975)": RiderTheme(
         "Showa", 1975, ("#9c1e1e", "#ef5350"), ("#1a1a1a", "#757575"), tier1_effect="border_glow",
@@ -200,6 +223,7 @@ RIDER_THEMES: dict[str, RiderTheme] = {
     ),
     "Kamen Rider ZX (1982)": RiderTheme(
         "Showa", 1982, ("#9c1e1e", "#ef5350"), ("#78909c", "#b0bec5"),
+        tier3_effect="stealth_mute",
     ),
     "Kamen Rider Black (1987)": RiderTheme(
         "Showa", 1987, ("#111111", "#616161"), ("#00903b", "#00e676"), tier1_effect="high_contrast_dark",
@@ -218,6 +242,7 @@ RIDER_THEMES: dict[str, RiderTheme] = {
     ),
     "Kamen Rider 555 (2003)": RiderTheme(
         "Heisei", 2003, ("#111111", "#424242"), ("#a60000", "#ff1744"),
+        tier3_effect="code_unlock",
     ),
     "Kamen Rider Blade (2004)": RiderTheme(
         "Heisei", 2004, ("#0f4a8f", "#42a5f5"), ("#78909c", "#b0bec5"),
@@ -251,6 +276,7 @@ RIDER_THEMES: dict[str, RiderTheme] = {
     ),
     "Kamen Rider Gaim (2013)": RiderTheme(
         "Heisei", 2013, ("#b33f00", "#ff9800"), ("#96761c", "#e4c657"),
+        tier3_effect="lock_overlay",
     ),
     "Kamen Rider Drive (2014)": RiderTheme(
         "Heisei", 2014, ("#9c1e1e", "#ef5350"), ("#1a1a1a", "#757575"), tier1_effect="accelerating_fill",

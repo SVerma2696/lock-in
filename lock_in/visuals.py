@@ -578,3 +578,70 @@ def apply_tier1_background_effect(
     if effect == "night_overlay":
         return render_night_overlay(base_image, color)
     return base_image.convert("RGBA")
+
+
+# ===================================================================== #
+# Tier 3: enforcement/interaction tweaks
+# See docs/superpowers/specs/2026-08-11-tier3-enforcement-interaction-design.md
+# ===================================================================== #
+
+def render_padlock_glyph(size: int) -> Image.Image:
+    """A simple padlock shape -- a rounded body with a curved shackle on top."""
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image, "RGBA")
+    body_top = size * 0.45
+    draw.rounded_rectangle(
+        [size * 0.2, body_top, size * 0.8, size * 0.95], radius=size * 0.08,
+        fill=(230, 230, 230, 235),
+    )
+    draw.arc(
+        [size * 0.3, size * 0.05, size * 0.7, body_top + size * 0.15],
+        start=180, end=360, fill=(230, 230, 230, 235), width=max(2, round(size * 0.08)),
+    )
+    return image
+
+
+def apply_gaim_lock_overlay(base_image: Image.Image, active: bool) -> Image.Image:
+    """
+    Dim the picture and paint a padlock in the middle of it, like Gaim
+    sealing the UI shut for the block. `active` is whether this
+    Rider's effect should show at all right now (only during a focus
+    block) -- when it's False, this just hands back the picture
+    exactly as it came in, same contract as apply_tier1_background_effect.
+    """
+    if not active:
+        return base_image.convert("RGBA")
+    width, height = base_image.size
+    dimmed = Image.new("RGBA", (width, height), (0, 0, 0, 90))
+    result = Image.alpha_composite(base_image.convert("RGBA"), dimmed)
+    glyph_size = min(width, height) // 4
+    glyph = render_padlock_glyph(glyph_size)
+    # This picture gets stretched across the ENTIRE app window (header
+    # AND the tab panel below it), not just the header -- dead center
+    # of the picture lands right on the seam between the two, easy to
+    # miss. Placing it a bit above that instead keeps it inside the
+    # header, roughly where the timer digits are.
+    position = ((width - glyph_size) // 2, round(height * 0.22) - glyph_size // 2)
+    result.alpha_composite(glyph, position)
+    return result
+
+
+_AMAZON_GREEN = "#33691e"
+
+
+def render_amazon_drain(width: int, height: int, progress_fraction: float) -> Image.Image:
+    """
+    A solid Amazon-green field that drains from full to empty as the
+    block goes on -- like a tank running dry. No text, no numbers, on
+    purpose; that's Amazon's whole "zero UI" gimmick. Always this one
+    fixed green, not derived from the Rider's own primary/secondary --
+    the spec calls for a literal #33691e, full stop.
+    """
+    progress_fraction = max(0.0, min(1.0, progress_fraction))
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image, "RGBA")
+    r, g, b = _hex_to_rgb(_AMAZON_GREEN)
+    remaining_height = round(height * (1 - progress_fraction))
+    if remaining_height > 0:
+        draw.rectangle([0, 0, width, remaining_height], fill=(r, g, b, 235))
+    return image
