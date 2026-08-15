@@ -684,35 +684,128 @@ class LockInApp(ctk.CTk):
 
     # ------------------------------------------------------------------ #
     def _build_help_tab(self, parent) -> None:
-        """A short, plain-language "how do I use this thing" guide."""
+        """A full, plain-language "how do I use this thing" guide — written
+        so a total beginner (or a five-year-old) can follow it without
+        knowing anything about the app already."""
         frame = ctk.CTkScrollableFrame(parent, fg_color="transparent")
         frame.pack(fill="both", expand=True)
+
+        def heading(text: str, color) -> None:
+            ctk.CTkLabel(
+                frame, text=text, text_color=color,
+                font=ctk.CTkFont(size=13, weight="bold"), anchor="w",
+            ).pack(anchor="w", pady=(16, 4), fill="x")
+
+        def body(text: str) -> None:
+            ctk.CTkLabel(
+                frame, text=text, justify="left", wraplength=460, anchor="w",
+            ).pack(anchor="w", pady=3, fill="x")
+
+        def bullet(text: str) -> None:
+            body(f"•  {text}")
 
         ctk.CTkLabel(
             frame, text="How to use Lock In", text_color=COLOR_LOOK_ACCENT,
             font=ctk.CTkFont(size=15, weight="bold"),
-        ).pack(anchor="w", pady=(0, 10))
+        ).pack(anchor="w", pady=(0, 6))
+        body(
+            "Lock In is a timer that helps you get work done by making "
+            "distracting apps annoying to open while you're focusing. "
+            "Here's everything it can do, and exactly how to turn each "
+            "part on."
+        )
 
+        # --- Quick start ---------------------------------------------- #
         start_word = self._henshin_word()
+        heading("1. The quick start", COLOR_LOOK_ACCENT)
         steps = [
-            "Set how long a focus block and break should last, in the "
-            "Settings tab (\"Timer lengths\").",
-            "In the Blocking tab, add apps that distract you to the block "
-            "list, and apps you trust to the allow list.",
+            "Go to the Settings tab and set how many minutes a focus "
+            "block and a break should last.",
+            "Go to the Blocking tab. Type apps that distract you (like a "
+            "game) under \"Blocked apps\", and apps you trust under "
+            "\"Always-allowed apps\" — one app name per line.",
             f'Press "{start_word}" to begin a focus block.',
-            "Stay off blocked apps during a focus block — opening one "
-            "warns you, then gets stricter the longer you stay.",
-            "After a block, check the Activity tab and correct anything "
-            "the app got wrong — it learns from every correction.",
-            "Pick a Kamen Rider color theme in Settings if you like, "
-            "purely for looks — or switch Wording to Professional if "
-            "you'd rather skip the tokusatsu theme entirely.",
+            "Stay off blocked apps while the timer runs. Opening one "
+            "warns you first, then gets stricter the longer you stay on "
+            "it.",
+            "When the block ends, open the Activity tab and tell the app "
+            "if it guessed right or wrong about any app — it gets "
+            "smarter every time you correct it.",
         ]
         for i, step in enumerate(steps, start=1):
-            ctk.CTkLabel(
-                frame, text=f"{i}. {step}", justify="left", wraplength=460,
-                anchor="w",
-            ).pack(anchor="w", pady=6, fill="x")
+            body(f"{i}. {step}")
+
+        # --- Look and voice --------------------------------------------- #
+        heading("2. Change how it looks and talks", COLOR_CLAUDE_ACCENT)
+        body(
+            "Both of these are in the Settings tab, and change instantly "
+            "— nothing to save."
+        )
+        bullet(
+            "\"Wording\" is a switch. Off keeps every word plain and "
+            "simple (\"Focus\", \"Start\"). On switches to fun Kamen "
+            "Rider hero talk (\"Henshin\", \"Off Mission\")."
+        )
+        bullet(
+            "Right below it, click the theme dropdown (it says "
+            "\"Kamen Rider theme\" when Wording is on, or \"Color "
+            "theme\" when it's off) and pick any of the 38 heroes. The "
+            "whole app instantly changes color — this is purely for "
+            "looks and never changes how blocking or timers work."
+        )
+
+        # --- Special Rider powers ---------------------------------------- #
+        heading("3. Some heroes have a secret extra power", COLOR_CLAUDE_ACCENT)
+        body(
+            "14 of the 38 heroes do something extra during a focus block. "
+            "To turn one on, just pick that hero's name from the theme "
+            "dropdown in Settings — there's nothing else to click or "
+            "flip on. As soon as you start your next focus block, its "
+            "power shows up by itself."
+        )
+
+        heading("Heroes with a fancy progress bar", COLOR_TIMER_ACCENT)
+        for name, what in [
+            ("Kamen Rider (1971)", "the progress bar becomes a spinning windmill."),
+            ("Skyrider", "the progress bar climbs upward instead of filling sideways."),
+            ("Fourze", "the progress bar becomes tiny stars that light up one by one."),
+            ("Build", "the progress bar becomes two bottles that fill up together."),
+            ("Stronger", "a soft red glow slowly grows around the edge of the window."),
+            ("Kiva", "the whole app gets a warm amber glow, like nighttime."),
+            ("Agito", "the progress bar's color starts dim and slowly wakes up brighter."),
+            ("Black", "dark mode text gets extra bold and easy to read."),
+            ("Drive", "the progress bar starts slow, then speeds up and catches up near the end."),
+        ]:
+            bullet(f"{name} — {what}")
+
+        heading("Heroes with quick-click buttons", COLOR_TIMER_ACCENT)
+        body(
+            "Pick one of these in Settings, and a row of buttons appears "
+            "right above \"Timer lengths\". Click a button and it fills "
+            "in your focus/break minutes for you — no typing needed."
+        )
+        for name, what in [
+            ("Kuuga", "4 buttons that set a quick, medium, long, or extra-long focus block in one click."),
+            ("Super-1", "5 buttons, one for each kind of task (coding, hardware, admin, thinking, research)."),
+            ("Gavv", "one switch that turns on lots of short, repeated 10-minute sprints instead of one long block. Flip it off to go back to your own numbers, which are never erased."),
+        ]:
+            bullet(f"{name} — {what}")
+
+        heading("Heroes that change what happens", COLOR_TIMER_ACCENT)
+        for name, what in [
+            ("Kamen Rider X", "before a focus block starts, it asks you to type what you're working on. No rush — it waits until you type something."),
+            ("Amazon", "during a focus block, the screen turns into a plain, draining green field, with zero warning time before a blocked app counts against you."),
+            ("ZX", "the whole app turns black-and-white, and it hides itself the moment a focus block starts — no sounds or pop-ups either."),
+            ("Gaim", "a padlock appears and the window always stays on top of everything else while you focus."),
+            ("555", "if you get the full-screen lockdown screen, you can type 555 on your keyboard to leave it early instead of waiting it out."),
+        ]:
+            bullet(f"{name} — {what}")
+
+        body(
+            "Everything else — the timer, the blocking rules, and the "
+            "learning — works exactly the same no matter which hero you "
+            "pick. The hero is just for fun."
+        )
 
     # ------------------------------------------------------------------ #
     def _build_settings_tab(self, parent) -> None:

@@ -135,6 +135,11 @@ To produce a standalone `.exe`, run `build.bat` — or just grab a
 [prebuilt release](#-releases) for your OS instead of building from
 source.
 
+Once it's open, the app's own **Help tab** has a full, plain-language
+walkthrough of every feature — including exactly how to turn on each
+of the 14 Kamen Riders' special extra powers (Tier 1/2/3 below). Start
+there before this README if you just want to use the app.
+
 *(Optional step 4: turn on the [Claude fallback](#claude-fallback-optional-off-by-default)
 if you want a second opinion on ambiguous windows — entirely optional,
 and off by default.)*
